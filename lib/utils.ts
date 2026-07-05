@@ -5,9 +5,6 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-/**
- * Formats a date string nicely (e.g., "Jan 5, 2026")
- */
 export function formatDate(dateString: string | Date): string {
   if (!dateString) return ""
   const date = new Date(dateString)
@@ -18,9 +15,6 @@ export function formatDate(dateString: string | Date): string {
   })
 }
 
-/**
- * Formats a date and time string nicely (e.g., "Jan 5, 2026, 2:30 PM")
- */
 export function formatDateTime(dateString: string | Date): string {
   if (!dateString) return "N/A"
   const date = new Date(dateString)
@@ -35,25 +29,35 @@ export function formatDateTime(dateString: string | Date): string {
 }
 
 /**
- * Checks if a task is past its due date and not completed
+ * Computes overdue status using properties matching the Task type
  */
-export function getOverdueStatus(deadlineStr: string | Date, status: string): boolean {
-  const normalizedStatus = status?.toUpperCase()
-  if (normalizedStatus === "COMPLETED" || normalizedStatus === "DONE") return false
-  if (!deadlineStr) return false
+export function getOverdueStatus(task: any): "overdue" | "due_soon" | "normal" {
+  if (!task || !task.due_date) return "normal"
   
-  const deadline = new Date(deadlineStr)
+  const status = task.status?.toUpperCase()
+  if (status === "COMPLETED" || status === "DONE") return "normal"
+  
+  const deadline = new Date(task.due_date)
   const now = new Date()
-  return deadline < now
+  
+  if (deadline < now) return "overdue"
+  
+  // Checking if it's due within the next 24 hours
+  const oneDayInMs = 24 * 60 * 60 * 1000
+  if (deadline.getTime() - now.getTime() < oneDayInMs) return "due_soon"
+  
+  return "normal"
 }
 
 /**
- * Returns Tailwind css classes for background and text colors based on overdue status
+ * Returns color string layouts mapped to status labels
  */
-export function overdueColor(deadlineStr: string | Date, status: string): string {
-  const isOverdue = getOverdueStatus(deadlineStr, status)
-  if (isOverdue) {
+export function overdueColor(statusLabel: "overdue" | "due_soon" | "normal"): string {
+  if (statusLabel === "overdue") {
     return "text-destructive bg-destructive/10 border-destructive/20"
+  }
+  if (statusLabel === "due_soon") {
+    return "text-amber-600 bg-amber-50 border-amber-200"
   }
   return "text-muted-foreground bg-muted border-transparent"
 }

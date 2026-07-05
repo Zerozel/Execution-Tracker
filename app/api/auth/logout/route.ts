@@ -1,21 +1,19 @@
 // ============================================================
-// Execution Tracker — POST /api/auth/logout
+// Execution Tracker — POST /api/auth/logout (Production)
 // ============================================================
 
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { AUTH_COOKIE_CONFIG } from "@/lib/auth";
 
 export async function POST() {
   try {
     const cookieStore = await cookies();
 
-    // Delete the user_id cookie by setting maxAge to 0
-    cookieStore.set("user_id", "", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 0, // Immediately expires the cookie
-      path: "/",
+    // Clear the cookie by using the same config but maxAge = 0
+    cookieStore.set(AUTH_COOKIE_CONFIG.name, "", {
+      ...AUTH_COOKIE_CONFIG.options,
+      maxAge: 0,
     });
 
     return NextResponse.json({

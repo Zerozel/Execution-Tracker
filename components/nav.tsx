@@ -1,14 +1,17 @@
 // ============================================================
-// Execution Tracker — Navigation Bar (Working)
+// Execution Tracker — Navigation Bar (User Management Link)
 // ============================================================
+// Amendment: Added "Users" link for admin users.
+// All existing navigation logic is unchanged.
 
 "use client";
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Users } from "lucide-react";
 import type { AuthUser } from "@/types";
 
 interface NavProps {
@@ -17,6 +20,7 @@ interface NavProps {
 
 export function Nav({ user }: NavProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   async function handleLogout() {
@@ -28,6 +32,13 @@ export function Nav({ user }: NavProps) {
     } catch {
       setIsLoggingOut(false);
     }
+  }
+
+  function linkClasses(href: string) {
+    const isActive = pathname === href || pathname.startsWith(href + "/");
+    return `text-sm font-medium transition-colors hover:text-foreground ${
+      isActive ? "text-foreground" : "text-muted-foreground"
+    }`;
   }
 
   return (
@@ -44,20 +55,19 @@ export function Nav({ user }: NavProps) {
         <nav className="flex items-center gap-4">
           {user && (
             <>
-              <Link
-                href="/dashboard"
-                className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-              >
+              <Link href="/dashboard" className={linkClasses("/dashboard")}>
                 Dashboard
               </Link>
 
               {user.role === "admin" && (
-                <Link
-                  href="/tasks"
-                  className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  All Tasks
-                </Link>
+                <>
+                  <Link href="/users" className={linkClasses("/users")}>
+                    Users
+                  </Link>
+                  <Link href="/tasks" className={linkClasses("/tasks")}>
+                    All Tasks
+                  </Link>
+                </>
               )}
             </>
           )}

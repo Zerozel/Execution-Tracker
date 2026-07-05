@@ -1,8 +1,10 @@
 // ============================================================
-// Execution Tracker — Root Layout (Production Ready)
+// Execution Tracker — Root Layout (PWA Enabled)
 // ============================================================
+// Amendment: Added PWA metadata links for installability.
+// All existing layout logic (auth, nav, error boundary) is unchanged.
 
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { Nav } from "@/components/nav";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -11,7 +13,6 @@ import { validateEnv } from "@/lib/env";
 import "./globals.css";
 
 // Validate environment variables at startup
-// This will throw immediately if configuration is missing
 if (typeof window === "undefined") {
   validateEnv();
 }
@@ -21,10 +22,39 @@ const inter = Inter({
   display: "swap",
 });
 
+// ============================================================
+// PWA METADATA
+// ============================================================
+
 export const metadata: Metadata = {
   title: "Execution Tracker",
   description: "Lightweight accountability for startup teams",
+  // Link to the web app manifest
+  manifest: "/manifest.json",
+  // Apple-specific metadata for iOS home screen
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "ExecTracker",
+  },
+  // Prevent search engines from indexing internal tools
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
+
+export const viewport: Viewport = {
+  themeColor: "#111827",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
+
+// ============================================================
+// LAYOUT COMPONENT
+// ============================================================
 
 export default async function RootLayout({
   children,
@@ -35,6 +65,14 @@ export default async function RootLayout({
 
   return (
     <html lang="en" className={inter.className}>
+      <head>
+        {/* Apple touch icon — used when adding to iOS home screen */}
+        <link
+          rel="apple-touch-icon"
+          href="/icons/icon-192x192.png"
+          sizes="192x192"
+        />
+      </head>
       <body className="min-h-screen bg-gray-50">
         <Nav user={user} />
         <ErrorBoundary>

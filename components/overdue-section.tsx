@@ -30,7 +30,7 @@ export function OverdueSection() {
 
         // Match parameters: getOverdueStatus(deadline, status) returning a boolean
         const overdue = allTasks.filter(
-          (task) => getOverdueStatus(task.deadline || task.due_date, task.status)
+          (task) => getOverdueStatus(task) === "overdue"
         );
 
         setOverdueTasks(overdue);
