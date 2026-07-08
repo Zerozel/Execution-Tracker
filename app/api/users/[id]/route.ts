@@ -15,10 +15,10 @@ export async function PATCH(
     const { id: targetUserId } = await params;
 
     const body = await request.json();
-    const { display_name, role } = body;
+    const { nickname, display_name, role } = body;
 
     // Validate: at least one field to update
-    if (!display_name && !role) {
+    if (!nickname && !display_name && !role) {
       return NextResponse.json(
         { error: "No fields to update" },
         { status: 400 }
@@ -29,6 +29,14 @@ export async function PATCH(
     if (role && !["admin", "member"].includes(role)) {
       return NextResponse.json(
         { error: "Role must be 'admin' or 'member'" },
+        { status: 400 }
+      );
+    }
+
+    // Validate nickname if provided
+    if (nickname && !nickname.trim()) {
+      return NextResponse.json(
+        { error: "Nickname cannot be empty" },
         { status: 400 }
       );
     }
@@ -57,11 +65,35 @@ export async function PATCH(
       );
     }
 
+    // If nickname is being changed, check for duplicates
+    if (nickname && nickname.trim().toLowerCase() !== targetUser.nickname) {
+      const normalizedNickname = nickname.trim().toLowerCase();
+      const { data: existingUser } = await supabase
+        .from("users")
+        .select("id")
+        .eq("nickname", normalizedNickname)
+        .neq("id", targetUserId)
+        .single();
+
+      if (existingUser) {
+        return NextResponse.json(
+          { error: `Nickname "${nickname.trim()}" is already taken. Choose a different nickname.` },
+          { status: 409 }
+        );
+      }
+    }
+
     // Build update object with only provided fields
     const updates: Record<string, string> = {};
+    
+    if (nickname && nickname.trim()) {
+      updates.nickname = nickname.trim().toLowerCase();
+    }
+    
     if (display_name && display_name.trim()) {
       updates.display_name = display_name.trim();
     }
+    
     if (role) {
       updates.role = role;
     }
@@ -75,6 +107,15 @@ export async function PATCH(
 
     if (updateError) {
       console.error("Error updating user:", updateError);
+      
+      // Handle unique constraint violation (safety net for nickname duplicates)
+      if (updateError.code === "23505") {
+        return NextResponse.json(
+          { error: `Nickname "${nickname?.trim()}" is already taken` },
+          { status: 409 }
+        );
+      }
+      
       return NextResponse.json(
         { error: "Failed to update user" },
         { status: 500 }

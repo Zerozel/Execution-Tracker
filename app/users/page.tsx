@@ -1,11 +1,12 @@
 // ============================================================
-// Execution Tracker — User Management Page
+// Execution Tracker — User Management Page (With Reliability)
 // ============================================================
 
 import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase";
 import { UserList } from "@/components/user-list";
 import { UserCreateForm } from "@/components/user-create-form";
+import { UserReliabilitySummary } from "@/components/user-reliability-summary";
 import { Users } from "lucide-react";
 import type { User } from "@/types";
 
@@ -34,6 +35,9 @@ export default async function UsersPage() {
           Create and manage team member accounts
         </p>
       </div>
+
+      {/* Team Reliability Summary */}
+      <UserReliabilitySummary />
 
       {/* Create User Form */}
       <UserCreateForm />
