@@ -12,7 +12,7 @@
 // ============================================================
 
 // Name for this cache version — increment when assets change significantly
-const CACHE_NAME = "execution-tracker-v1";
+const CACHE_NAME = "execution-tracker-v2";
 
 // Static assets to pre-cache on install.
 // These are the minimum files needed for the app shell.
