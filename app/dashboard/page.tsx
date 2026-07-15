@@ -15,7 +15,6 @@ export default async function DashboardPage() {
   const user = await requireAuth();
   const supabase = await createClient();
 
-  // Fetch accepted tasks for the daily plan task selector
   const { data: acceptedTasks } = await supabase
     .from("tasks")
     .select("id, title, status")
@@ -42,9 +41,7 @@ export default async function DashboardPage() {
         {user.role === "admin" && <ClientTaskCreateWrapper />}
       </div>
 
-      {/* ============================================ */}
-      {/* SECTION 0: Daily Plan                        */}
-      {/* ============================================ */}
+      {/* Daily Plan */}
       <DailyPlan
         userRole={user.role}
         acceptedTasks={(acceptedTasks || []).map((t) => ({
@@ -54,78 +51,75 @@ export default async function DashboardPage() {
         }))}
       />
 
-      {/* ============================================ */}
-      {/* Stats Overview                               */}
-      {/* ============================================ */}
+      {/* Stats */}
       <DashboardStats />
 
-      {/* ============================================ */}
-      {/* SECTION 1: Overdue Tasks (Priority)          */}
-      {/* ============================================ */}
+      {/* Overdue */}
       <OverdueSection />
 
-      {/* ============================================ */}
-      {/* SECTION 2: Pending Acceptance (Admin only)   */}
-      {/* ============================================ */}
+      {/* Pending Acceptance */}
       {user.role === "admin" && (
         <SectionWithIcon
           icon={<ClipboardList className="h-5 w-5 text-blue-600" />}
           title="Pending Acceptance"
-          description="Tasks assigned but not yet accepted by team members"
+          description="Tasks assigned but not yet accepted"
         >
-          <TaskList user={user} filterStatus="assigned" />
+          <TaskList
+            user={user}
+            filterStatus="assigned"
+            dashboardLimit={3}
+            viewAllHref="/tasks?status=assigned"
+          />
         </SectionWithIcon>
       )}
 
-      {/* ============================================ */}
-      {/* SECTION 3: Awaiting Review (Admin only)      */}
-      {/* ============================================ */}
+      {/* Awaiting Review */}
       {user.role === "admin" && (
         <SectionWithIcon
           icon={<Send className="h-5 w-5 text-purple-600" />}
           title="Awaiting Review"
-          description="Work submitted and waiting for your approval"
+          description="Work submitted and waiting for approval"
         >
-          <TaskList user={user} filterStatus="submitted" />
+          <TaskList
+            user={user}
+            filterStatus="submitted"
+            dashboardLimit={3}
+            viewAllHref="/tasks?status=submitted"
+          />
         </SectionWithIcon>
       )}
 
-      {/* ============================================ */}
-      {/* SECTION 4: In Progress                       */}
-      {/* ============================================ */}
+      {/* In Progress */}
       <SectionWithIcon
         icon={<CheckCircle2 className="h-5 w-5 text-amber-600" />}
         title="In Progress"
-        description="Tasks that have been accepted and are being worked on"
+        description="Tasks being worked on"
       >
-        <TaskList user={user} filterStatus="accepted" />
+        <TaskList
+          user={user}
+          filterStatus="accepted"
+          dashboardLimit={3}
+          viewAllHref="/tasks?status=accepted"
+        />
       </SectionWithIcon>
 
-      {/* ============================================ */}
-      {/* SECTION 5: Recently Completed                */}
-      {/* ============================================ */}
+      {/* Recently Completed */}
       <SectionWithIcon
         icon={<Trophy className="h-5 w-5 text-green-600" />}
         title="Recently Completed"
         description="Approved and completed work"
       >
-        <TaskList user={user} filterStatus="completed" />
+        <TaskList
+          user={user}
+          filterStatus="completed"
+          dashboardLimit={3}
+          viewAllHref="/tasks?status=completed"
+        />
       </SectionWithIcon>
-
-      {/* ============================================ */}
-      {/* SECTION 6: All Tasks (full list)             */}
-      {/* ============================================ */}
-      <div className="space-y-4 border-t pt-8">
-        <h2 className="text-lg font-semibold">All Tasks</h2>
-        <TaskList user={user} />
-      </div>
     </div>
   );
 }
 
-/**
- * Helper component for section headers with icons.
- */
 function SectionWithIcon({
   icon,
   title,
