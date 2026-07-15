@@ -1,5 +1,5 @@
 // ============================================================
-// Execution Tracker — Daily Plan Component (Phase 5 Polished)
+// Execution Tracker — Daily Plan Component (Evening Fix)
 // ============================================================
 
 "use client";
@@ -27,6 +27,7 @@ import {
   Target,
   ClipboardCheck,
   AlertCircle,
+  Sparkles,
 } from "lucide-react";
 import type {
   DailyPlan,
@@ -104,7 +105,6 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
       const response = await fetch("/api/daily-plan/today");
       if (!response.ok) {
         if (response.status === 401) {
-          // Not authenticated — skip silently
           return;
         }
         throw new Error("Failed to fetch plan");
@@ -306,7 +306,6 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
         return;
       }
 
-      // Refresh plan data
       await fetchPlan();
 
       if (status === "committed") {
@@ -329,7 +328,6 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
   function handleSave(status: "committed" | "checked_in") {
     if (isSaving || hasSubmitted) return;
 
-    // Client-side validation before sending
     if (status === "committed" && goals.length === 0) {
       setError("Please add at least one goal before committing");
       return;
@@ -347,7 +345,18 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
   // ============================================
   // DERIVED STATE
   // ============================================
-  const isEvening = plan?.status === "committed";
+  // FIX: Evening mode is available when:
+  // - Plan is committed (morning plan done, ready to reflect)
+  // - Plan is checked_in but within edit window (editing after check-in)
+  // - Plan is checked_in and user expanded it (viewing)
+  // Morning mode is available when:
+  // - No plan exists yet
+  // - Plan is draft
+  // - Plan is committed but user hasn't expanded (collapsed amber card)
+  const isEvening =
+    plan?.status === "committed" ||
+    plan?.status === "checked_in";
+
   const completedGoalCount = goals.filter((g) => g.is_completed).length;
 
   // ============================================
@@ -431,7 +440,9 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
             {isEvening ? (
               <>
                 <Moon className="h-5 w-5 text-indigo-600" />
-                How did your day go?
+                {plan?.status === "checked_in"
+                  ? "Edit Your Check-In"
+                  : "How did your day go?"}
               </>
             ) : (
               <>
@@ -538,7 +549,18 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
             </div>
           )}
 
-          {/* Add Goal Input */}
+          {/* Empty Goals — Evening (no goals set but still checking in) */}
+          {goals.length === 0 && isEvening && (
+            <div className="rounded-md bg-gray-50 border border-dashed border-gray-300 p-4 text-center">
+              <Sparkles className="mx-auto h-6 w-6 text-gray-300 mb-2" />
+              <p className="text-sm text-muted-foreground">No goals were set today</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                You can still record what you accomplished.
+              </p>
+            </div>
+          )}
+
+          {/* Add Goal Input — only in morning mode */}
           {!isEvening && goals.length < MAX_GOALS && (
             <div className="flex gap-2">
               <Input
@@ -570,14 +592,12 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
             </div>
           )}
 
-          {/* Goal Limit Warning */}
           {showGoalLimitWarning && (
             <p className="text-xs text-amber-600 animate-in fade-in">
               Maximum {MAX_GOALS} goals allowed. Remove a goal to add a new one.
             </p>
           )}
 
-          {/* Max Goals Reached */}
           {goals.length >= MAX_GOALS && !isEvening && (
             <p className="text-xs text-muted-foreground">
               Maximum {MAX_GOALS} goals reached. Remove a goal to add a new one.
@@ -586,7 +606,7 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
         </div>
 
         {/* ============================================ */}
-        {/* COMMITTED TASKS SECTION                       */}
+        {/* COMMITTED TASKS — morning only                */}
         {/* ============================================ */}
         {!isEvening && acceptedTasks.length > 0 && (
           <div className="space-y-3">
@@ -629,7 +649,7 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
         )}
 
         {/* ============================================ */}
-        {/* MORNING NOTE                                  */}
+        {/* MORNING NOTE — morning only                   */}
         {/* ============================================ */}
         {!isEvening && (
           <div className="space-y-2">
@@ -651,7 +671,7 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
         )}
 
         {/* ============================================ */}
-        {/* CARRY FORWARD                                 */}
+        {/* CARRY FORWARD — morning only                  */}
         {/* ============================================ */}
         {carryForward && carryForward.length > 0 && !isEvening && (
           <div className="rounded-md bg-blue-50 border border-blue-200 p-4">
@@ -694,6 +714,11 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
         {/* ============================================ */}
         {isEvening && (
           <div className="space-y-5 border-t pt-4">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Moon className="h-3.5 w-3.5 text-indigo-500" />
+              Evening Check-In
+            </div>
+
             {/* Accomplishment */}
             <div className="space-y-2">
               <h3 className="text-sm font-semibold">
@@ -783,7 +808,11 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
                 className="bg-indigo-600 hover:bg-indigo-700"
               >
                 <Moon className="h-4 w-4 mr-2" />
-                {isSaving ? "Saving..." : "Submit Check-In"}
+                {isSaving
+                  ? "Saving..."
+                  : plan?.status === "checked_in"
+                  ? "Update Check-In"
+                  : "Submit Check-In"}
               </Button>
             </>
           ) : (
