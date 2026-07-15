@@ -1,5 +1,5 @@
 // ============================================================
-// Execution Tracker — User Management Page (With Reliability)
+// Execution Tracker — User Management Page (With Daily Plans)
 // ============================================================
 
 import { requireAdmin } from "@/lib/auth";
@@ -7,6 +7,8 @@ import { createClient } from "@/lib/supabase";
 import { UserList } from "@/components/user-list";
 import { UserCreateForm } from "@/components/user-create-form";
 import { UserReliabilitySummary } from "@/components/user-reliability-summary";
+import { TeamDailyPlans } from "@/components/team-daily-plans";
+import { DailyPlanHeatmap } from "@/components/daily-plan-heatmap";
 import { Users } from "lucide-react";
 import type { User } from "@/types";
 
@@ -36,13 +38,37 @@ export default async function UsersPage() {
         </p>
       </div>
 
-      {/* Team Reliability Summary */}
+      {/* ============================================ */}
+      {/* SECTION: Team Daily Plans (Today)            */}
+      {/* ============================================ */}
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold">Today&apos;s Plans</h2>
+          <p className="text-sm text-muted-foreground">
+            What each team member committed to today
+          </p>
+        </div>
+        <TeamDailyPlans />
+      </div>
+
+      {/* ============================================ */}
+      {/* SECTION: Engagement Heat Map                 */}
+      {/* ============================================ */}
+      <DailyPlanHeatmap />
+
+      {/* ============================================ */}
+      {/* SECTION: Team Reliability Summary            */}
+      {/* ============================================ */}
       <UserReliabilitySummary />
 
-      {/* Create User Form */}
+      {/* ============================================ */}
+      {/* SECTION: Create User Form                    */}
+      {/* ============================================ */}
       <UserCreateForm />
 
-      {/* Active Users */}
+      {/* ============================================ */}
+      {/* SECTION: Active Users                        */}
+      {/* ============================================ */}
       <div className="space-y-4">
         <div>
           <h2 className="text-lg font-semibold">
@@ -55,7 +81,9 @@ export default async function UsersPage() {
         <UserList users={activeUsers} />
       </div>
 
-      {/* Archived Users */}
+      {/* ============================================ */}
+      {/* SECTION: Archived Users                      */}
+      {/* ============================================ */}
       {archivedUsers.length > 0 && (
         <div className="space-y-4 border-t pt-8">
           <div>

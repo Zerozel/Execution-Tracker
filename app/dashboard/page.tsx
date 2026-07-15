@@ -2,18 +2,28 @@
 // Execution Tracker — Founder Accountability Dashboard
 // ============================================================
 
-// NO "use client" directive here! This is a secure Server Component.
 import { requireAuth } from "@/lib/auth";
+import { createClient } from "@/lib/supabase";
 import { DashboardStats } from "@/components/dashboard-stats";
 import { TaskList } from "@/components/task-list";
-import { TaskCreateDialog } from "@/components/task-create-dialog";
 import { OverdueSection } from "@/components/overdue-section";
+import { DailyPlan } from "@/components/daily-plan";
+import { ClientTaskCreateWrapper } from "./client-wrapper";
 import { ClipboardList, Send, CheckCircle2, Trophy } from "lucide-react";
-import { ClientTaskCreateWrapper } from "./client-wrapper"; // We will create this small file next!
 
 export default async function DashboardPage() {
-  // Safe server-side cookies work perfectly here now
   const user = await requireAuth();
+  const supabase = await createClient();
+
+  // Fetch accepted tasks for the daily plan task selector
+  const { data: acceptedTasks } = await supabase
+    .from("tasks")
+    .select("id, title, status")
+    .eq("owner_id", user.id)
+    .in("status", ["assigned", "accepted", "submitted"])
+    .eq("is_archived", false)
+    .order("created_at", { ascending: false })
+    .limit(10);
 
   return (
     <div className="space-y-8">
@@ -29,19 +39,34 @@ export default async function DashboardPage() {
               : `Welcome back, ${user.display_name}`}
           </p>
         </div>
-        {user.role === "admin" && (
-          /* We safely use the wrapper to handle the interactive window.location.reload event */
-          <ClientTaskCreateWrapper />
-        )}
+        {user.role === "admin" && <ClientTaskCreateWrapper />}
       </div>
 
-      {/* Stats Overview */}
+      {/* ============================================ */}
+      {/* SECTION 0: Daily Plan                        */}
+      {/* ============================================ */}
+      <DailyPlan
+        userRole={user.role}
+        acceptedTasks={(acceptedTasks || []).map((t) => ({
+          id: t.id,
+          title: t.title,
+          status: t.status,
+        }))}
+      />
+
+      {/* ============================================ */}
+      {/* Stats Overview                               */}
+      {/* ============================================ */}
       <DashboardStats />
 
-      {/* SECTION 1: Overdue Tasks (Priority) */}
+      {/* ============================================ */}
+      {/* SECTION 1: Overdue Tasks (Priority)          */}
+      {/* ============================================ */}
       <OverdueSection />
 
-      {/* SECTION 2: Pending Acceptance (Admin only) */}
+      {/* ============================================ */}
+      {/* SECTION 2: Pending Acceptance (Admin only)   */}
+      {/* ============================================ */}
       {user.role === "admin" && (
         <SectionWithIcon
           icon={<ClipboardList className="h-5 w-5 text-blue-600" />}
@@ -52,7 +77,9 @@ export default async function DashboardPage() {
         </SectionWithIcon>
       )}
 
-      {/* SECTION 3: Awaiting Review (Admin only) */}
+      {/* ============================================ */}
+      {/* SECTION 3: Awaiting Review (Admin only)      */}
+      {/* ============================================ */}
       {user.role === "admin" && (
         <SectionWithIcon
           icon={<Send className="h-5 w-5 text-purple-600" />}
@@ -63,7 +90,9 @@ export default async function DashboardPage() {
         </SectionWithIcon>
       )}
 
-      {/* SECTION 4: In Progress */}
+      {/* ============================================ */}
+      {/* SECTION 4: In Progress                       */}
+      {/* ============================================ */}
       <SectionWithIcon
         icon={<CheckCircle2 className="h-5 w-5 text-amber-600" />}
         title="In Progress"
@@ -72,7 +101,9 @@ export default async function DashboardPage() {
         <TaskList user={user} filterStatus="accepted" />
       </SectionWithIcon>
 
-      {/* SECTION 5: Recently Completed */}
+      {/* ============================================ */}
+      {/* SECTION 5: Recently Completed                */}
+      {/* ============================================ */}
       <SectionWithIcon
         icon={<Trophy className="h-5 w-5 text-green-600" />}
         title="Recently Completed"
@@ -81,7 +112,9 @@ export default async function DashboardPage() {
         <TaskList user={user} filterStatus="completed" />
       </SectionWithIcon>
 
-      {/* SECTION 6: All Tasks (full list) */}
+      {/* ============================================ */}
+      {/* SECTION 6: All Tasks (full list)             */}
+      {/* ============================================ */}
       <div className="space-y-4 border-t pt-8">
         <h2 className="text-lg font-semibold">All Tasks</h2>
         <TaskList user={user} />
@@ -90,6 +123,9 @@ export default async function DashboardPage() {
   );
 }
 
+/**
+ * Helper component for section headers with icons.
+ */
 function SectionWithIcon({
   icon,
   title,

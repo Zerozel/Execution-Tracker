@@ -56,6 +56,11 @@ export function middleware(request: NextRequest) {
   if (pathname.startsWith("/api/auth/")) {
     return NextResponse.next();
   }
+  
+  // Allow daily-plan API endpoints (they handle their own auth)
+if (pathname.startsWith("/api/daily-plan/")) {
+  return NextResponse.next();
+}
 
   // For all other routes, check authentication
   const userId = request.cookies.get("user_id")?.value;

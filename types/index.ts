@@ -90,3 +90,98 @@ export interface SubmissionWithRelations extends Submission {
     display_name: string;
   } | null;
 }
+
+// ============================================================
+// Daily Accountability Types
+// ============================================================
+
+export interface DailyPlanGoal {
+  id: string;
+  content: string;
+  is_completed: boolean;
+}
+
+export interface DailyPlanTaskCommit {
+  task_id: string;
+  title: string;
+  status_when_committed: string;
+}
+
+export interface DailyPlanMorning {
+  goals: DailyPlanGoal[];
+  committed_tasks: DailyPlanTaskCommit[];
+  note: string | null;
+}
+
+export interface ReflectionHistoryEntry {
+  time: string;
+  content: string;
+}
+
+export interface DailyPlanEvening {
+  accomplishment: string | null;
+  blockers: string | null;
+  reflection: string | null;
+  mood: string | null;
+  reflection_history?: ReflectionHistoryEntry[];
+}
+
+export interface CarriedForwardGoal {
+  goal_id: string;
+  content: string;
+}
+
+export interface DailyPlanData {
+  morning: DailyPlanMorning;
+  evening: DailyPlanEvening;
+  carried_from_yesterday?: CarriedForwardGoal[];
+}
+
+export type DailyPlanStatus = "draft" | "committed" | "checked_in";
+
+export interface DailyPlan {
+  id: string;
+  user_id: string;
+  plan_date: string;
+  status: DailyPlanStatus;
+  plan_data: DailyPlanData;
+  committed_at: string | null;
+  checked_in_at: string | null;
+  updated_at: string;
+  created_at: string;
+}
+
+export interface DailyPlanWithUser extends DailyPlan {
+  user: {
+    id: string;
+    nickname: string;
+    display_name: string;
+  };
+}
+
+export interface CarryForwardResponse {
+  from_date: string;
+  goals: CarriedForwardGoal[];
+}
+
+export interface TodayPlanResponse {
+  plan: DailyPlan | null;
+  carry_forward: CarryForwardResponse | null;
+}
+
+export interface EngagementDay {
+  date: string;
+  status: "checked_in" | "committed" | "no_plan";
+}
+
+export interface EngagementUser {
+  user_id: string;
+  display_name: string;
+  days: EngagementDay[];
+}
+
+export interface EngagementResponse {
+  week_start: string;
+  week_end: string;
+  users: EngagementUser[];
+}
