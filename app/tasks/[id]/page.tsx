@@ -113,7 +113,7 @@ export default async function TaskDetailPage({ params }: TaskDetailPageProps) {
             <h3 className="text-sm font-medium text-muted-foreground">
               Description
             </h3>
-            <p className="mt-1 text-sm">
+            <p className="mt-1 text-sm whitespace-pre-wrap">
               {task.description || "No description provided"}
             </p>
           </div>

@@ -109,7 +109,7 @@ export function TaskCard({ task }: TaskCardProps) {
 
           {/* Description Preview */}
           {task.description && (
-            <p className="line-clamp-2 text-xs">{task.description}</p>
+            <p className="line-clamp-2 text-xs whitespace-pre-wrap">{task.description}</p>
           )}
         </div>
       </CardContent>

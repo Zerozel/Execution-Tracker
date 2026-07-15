@@ -127,3 +127,39 @@ self.addEventListener("fetch", (event) => {
     })
   );
 });
+
+
+// ============================================================
+// EVENING CHECK-IN REMINDER
+// ============================================================
+// Check every 30 minutes between 5 PM and 8 PM if user needs reminder
+
+setInterval(() => {
+  const now = new Date();
+  const hours = now.getHours();
+  
+  // Only run between 5 PM and 8 PM
+  if (hours < 17 || hours >= 20) return;
+
+  // Check if already notified today
+  const lastNotified = localStorage.getItem("checkin_reminder_date");
+  const today = new Date().toDateString();
+  if (lastNotified === today) return;
+
+  // Fetch reminder status from API
+  fetch("/api/notifications/check-in-reminder")
+    .then((res) => res.json())
+    .then((data) => {
+      if (data.needsReminder) {
+        self.registration.showNotification("Execution Tracker", {
+          body: "You haven't checked in yet today. How did your day go?",
+          icon: "/icons/icon-192x192.png",
+          badge: "/icons/icon-192x192.png",
+          tag: "checkin-reminder",
+          requireInteraction: true,
+        });
+        localStorage.setItem("checkin_reminder_date", today);
+      }
+    })
+    .catch(() => {});
+}, 30 * 60 * 1000); // Every 30 minutes

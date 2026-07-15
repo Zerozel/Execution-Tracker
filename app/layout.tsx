@@ -11,6 +11,10 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { getCurrentUser } from "@/lib/auth";
 import { validateEnv } from "@/lib/env";
 import "./globals.css";
+import { NotificationPrompt } from "@/components/notification-prompt";
+
+// Inside the body, after <ErrorBoundary>...</ErrorBoundary>
+
 
 // Validate environment variables at startup
 if (typeof window === "undefined") {
@@ -78,6 +82,7 @@ export default async function RootLayout({
         <ErrorBoundary>
           <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
         </ErrorBoundary>
+        <NotificationPrompt />
       </body>
     </html>
   );
