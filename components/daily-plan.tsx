@@ -356,6 +356,7 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
   const isEvening =
     plan?.status === "committed" ||
     plan?.status === "checked_in";
+    (!plan && new Date().getHours() >= 15);
 
   const completedGoalCount = goals.filter((g) => g.is_completed).length;
 
