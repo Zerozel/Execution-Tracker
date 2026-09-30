@@ -23,5 +23,11 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  // `.kilo/worktrees/` holds full snapshots of this app left behind by the
+  // Kilo agent tool. They sit INSIDE the project root, and `**/*.ts(x)`
+  // matches them: TypeScript does not skip dot-directories the way ESLint
+  // does. Without the exclude below, every build type-checks ~90 stale
+  // duplicate copies of the app, and one error in an old snapshot fails the
+  // build. `.test-dist` is the Slicing Pie test build (tsconfig.test.json).
+  "exclude": ["node_modules", ".kilo", ".test-dist"]
 }

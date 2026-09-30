@@ -1,9 +1,43 @@
 // ============================================================
 // Execution Tracker — Supabase Server Client
 // ============================================================
+// WHY THIS CLIENT USES THE SERVICE-ROLE KEY
+//
+// The app authenticates people with its own signed cookie (`user_id`,
+// see lib/auth.ts) — it does NOT use Supabase Auth. So when a request
+// reaches Supabase, there is no Supabase session and `auth.uid()` is
+// null. Every Row Level Security policy in supabase/migrations is
+// written against `auth.uid()` (and `public.is_admin()`, which calls
+// it), which means:
+//
+//   • a policy `to authenticated` can never match the anon key,
+//   • a policy scoped per-user can never match at all, because there
+//     is no user for the database to scope to.
+//
+// Read with the anon key, the Pie tables therefore return NOTHING. That
+// is not a safety feature that can be kept — it is a broken feature.
+//
+// So the arrangement is:
+//
+//   • The app's server routes read and write with the service role.
+//     RLS does not apply to it; the authorisation check that matters is
+//     `requireAdminApi()` / `requireUser()` plus the per-route scoping,
+//     which is where the D4 visibility rules already live.
+//   • RLS stays enabled, and its policies deny the anon key everything.
+//     That is the backstop that matters: the anon key ships to browsers
+//     inside the JavaScript bundle, so anyone can hold it, and it must
+//     unlock nothing. See 0008 for the explicit lockdown.
+//
+// The service-role key must NEVER be exported as NEXT_PUBLIC_* and must
+// never be read by a Client Component. Everything in this file is
+// server-only, and no Client Component imports it.
+// ============================================================
 
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
+
+/** Warned once per process, not once per query. */
+let warnedAboutMissingKey = false;
 
 /**
  * Create a Supabase client for server-side usage.
@@ -17,10 +51,37 @@ import { cookies } from "next/headers";
  */
 export async function createClient() {
   const cookieStore = await cookies();
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!serviceKey && !warnedAboutMissingKey) {
+    warnedAboutMissingKey = true;
+    console.error(
+      [
+        "",
+        "════════════════════════════════════════════════════════════",
+        "  SUPABASE_SERVICE_ROLE_KEY is not set.",
+        "",
+        "  The app reads with the service role because it uses its own",
+        "  cookie session rather than Supabase Auth — without this key,",
+        "  every Pie screen comes back EMPTY (Row Level Security denies",
+        "  the anon key), even though the data is there.",
+        "",
+        "  Fix: Supabase dashboard → Project Settings → API →",
+        "       Project API keys → service_role → copy into .env.local",
+        "",
+        "       SUPABASE_SERVICE_ROLE_KEY=<the service_role secret>",
+        "",
+        "  This key is server-only. Never prefix it with NEXT_PUBLIC_.",
+        "  Falling back to the anon key so the rest of the app still runs.",
+        "════════════════════════════════════════════════════════════",
+        "",
+      ].join("\n")
+    );
+  }
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    serviceKey ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         getAll() {

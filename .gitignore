@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.test-dist/
+
+# Kilo agent tool (stale worktree snapshots of this app, kept out of the
+# build by the `exclude` list in tsconfig.json)
+.kilo/worktrees/

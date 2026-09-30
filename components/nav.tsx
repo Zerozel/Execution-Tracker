@@ -73,6 +73,12 @@ export function Nav({ user }: NavProps) {
                 <Link href="/dashboard" className={linkClasses("/dashboard")}>
                   Dashboard
                 </Link>
+                <Link href="/my-time" className={linkClasses("/my-time")}>
+                  My Time
+                </Link>
+                <Link href="/my-slices" className={linkClasses("/my-slices")}>
+                  My Slices
+                </Link>
                 {user.role === "admin" && (
                   <>
                     <Link href="/users" className={linkClasses("/users")}>
@@ -81,8 +87,14 @@ export function Nav({ user }: NavProps) {
                     <Link href="/tasks" className={linkClasses("/tasks")}>
                       All Tasks
                     </Link>
+                    <Link href="/pies" className={linkClasses("/pies")}>
+                      Slicing Pie
+                    </Link>
                   </>
                 )}
+                <Link href="/help" className={linkClasses("/help")}>
+                  Guide
+                </Link>
               </>
             )}
           </nav>
@@ -152,6 +164,20 @@ export function Nav({ user }: NavProps) {
                 >
                   Dashboard
                 </Link>
+                <Link
+                  href="/my-time"
+                  className="block px-3 py-2 rounded-md text-base font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  My Time
+                </Link>
+                <Link
+                  href="/my-slices"
+                  className="block px-3 py-2 rounded-md text-base font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  My Slices
+                </Link>
                 {user.role === "admin" && (
                   <>
                     <Link
@@ -168,8 +194,22 @@ export function Nav({ user }: NavProps) {
                     >
                       All Tasks
                     </Link>
+                    <Link
+                      href="/pies"
+                      className="block px-3 py-2 rounded-md text-base font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      Slicing Pie
+                    </Link>
                   </>
                 )}
+                <Link
+                  href="/help"
+                  className="block px-3 py-2 rounded-md text-base font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Guide
+                </Link>
                 <div className="px-3 pt-2 border-t">
                   <Button
                     variant="ghost"

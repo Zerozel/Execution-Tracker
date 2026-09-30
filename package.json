@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "tsc -p tsconfig.test.json && node .test-dist/lib/slicing-pie/__tests__/run-all.js"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

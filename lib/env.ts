@@ -8,6 +8,16 @@ const REQUIRED_ENV_VARS = [
 ] as const;
 
 /**
+ * Optional, but the Pie feature is empty without it.
+ *
+ * Deliberately NOT in REQUIRED_ENV_VARS: a missing service key must not
+ * stop the whole app from booting — the execution tracker itself does
+ * not need it. `createClient()` logs a loud warning instead. See the
+ * header of lib/supabase.ts for why the key is needed at all.
+ */
+const RECOMMENDED_ENV_VARS = ["SUPABASE_SERVICE_ROLE_KEY"] as const;
+
+/**
  * Validates that all required environment variables are set.
  *
  * Call this at application startup (instrumentation or layout).
@@ -46,6 +56,23 @@ export function validateEnv(): void {
     ].join("\n");
 
     throw new Error(message);
+  }
+
+  const missingRecommended = RECOMMENDED_ENV_VARS.filter(
+    (varName) => !process.env[varName]
+  );
+  if (missingRecommended.length > 0) {
+    console.warn(
+      [
+        "",
+        "  Optional Supabase credentials not set:",
+        ...missingRecommended.map((v) => `    • ${v}`),
+        "  The equity Pie screens read through the service role, so they",
+        "  will come back EMPTY without the service_role key.",
+        "  Supabase dashboard → Project Settings → API → service_role key.",
+        "",
+      ].join("\n")
+    );
   }
 }
 
