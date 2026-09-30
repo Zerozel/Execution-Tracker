@@ -138,7 +138,7 @@ export default async function MySlicesPage() {
                   </p>
                   <p className="mt-1 text-2xl font-bold tabular-nums">
                     {hasSlices
-                      ? formatPercent(d.ownership.percent, pdp)
+                      ? formatPercent(d.ownership.percent, { decimalPlaces: pdp })
                       : "—"}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
