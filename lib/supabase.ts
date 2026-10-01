@@ -39,6 +39,9 @@ import { cookies } from "next/headers";
 /** Warned once per process, not once per query. */
 let warnedAboutMissingKey = false;
 
+/** Set once we've thrown in production, so we only fail once per process. */
+let thrownAboutMissingKey = false;
+
 /**
  * Create a Supabase client for server-side usage.
  *
@@ -53,30 +56,72 @@ export async function createClient() {
   const cookieStore = await cookies();
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (!serviceKey && !warnedAboutMissingKey) {
-    warnedAboutMissingKey = true;
-    console.error(
-      [
-        "",
-        "════════════════════════════════════════════════════════════",
-        "  SUPABASE_SERVICE_ROLE_KEY is not set.",
-        "",
-        "  The app reads with the service role because it uses its own",
-        "  cookie session rather than Supabase Auth — without this key,",
-        "  every Pie screen comes back EMPTY (Row Level Security denies",
-        "  the anon key), even though the data is there.",
-        "",
-        "  Fix: Supabase dashboard → Project Settings → API →",
-        "       Project API keys → service_role → copy into .env.local",
-        "",
-        "       SUPABASE_SERVICE_ROLE_KEY=<the service_role secret>",
-        "",
-        "  This key is server-only. Never prefix it with NEXT_PUBLIC_.",
-        "  Falling back to the anon key so the rest of the app still runs.",
-        "════════════════════════════════════════════════════════════",
-        "",
-      ].join("\n")
-    );
+  if (!serviceKey) {
+    const isProduction = process.env.NODE_ENV === "production";
+
+    // In production, the fallback is not acceptable: falling back to the
+    // anon key turns every Pie write into a 42501 with a hint that reads
+    // like a database misconfiguration, when the real problem is a missing
+    // Vercel environment variable. Fail loudly, once per process, with an
+    // error message that names the actual fix.
+    if (isProduction && !thrownAboutMissingKey) {
+      thrownAboutMissingKey = true;
+      throw new Error(
+        [
+          "",
+          "════════════════════════════════════════════════════════════",
+          "  SUPABASE_SERVICE_ROLE_KEY is not set in production.",
+          "",
+          "  The app reads with the service role because it uses its own",
+          "  cookie session rather than Supabase Auth. Without this key,",
+          "  every Pie read comes back empty and every Pie write fails",
+          "  with a 42501 'permission denied' error, because Row Level",
+          "  Security denies the anon key that would otherwise be used.",
+          "",
+          "  Fix: Vercel dashboard → Project → Settings → Environment",
+          "       Variables → add for Production, Preview, and Development:",
+          "",
+          "       SUPABASE_SERVICE_ROLE_KEY=<the service_role secret>",
+          "",
+          "  The key comes from Supabase → Project Settings → API →",
+          "  Project API keys → service_role. It is server-only.",
+          "  Never prefix it with NEXT_PUBLIC_.",
+          "",
+          "  Redeploy after adding the variable.",
+          "════════════════════════════════════════════════════════════",
+          "",
+        ].join("\n")
+      );
+    }
+
+    // Development: warn once and fall back to anon so local work can
+    // continue. This path exists so a fresh contributor isn't blocked on
+    // obtaining the service key before they can run the app at all.
+    if (!warnedAboutMissingKey) {
+      warnedAboutMissingKey = true;
+      console.error(
+        [
+          "",
+          "════════════════════════════════════════════════════════════",
+          "  SUPABASE_SERVICE_ROLE_KEY is not set (development).",
+          "",
+          "  The app reads with the service role because it uses its own",
+          "  cookie session rather than Supabase Auth — without this key,",
+          "  every Pie screen comes back EMPTY (Row Level Security denies",
+          "  the anon key), even though the data is there.",
+          "",
+          "  Fix: Supabase dashboard → Project Settings → API →",
+          "       Project API keys → service_role → copy into .env.local",
+          "",
+          "       SUPABASE_SERVICE_ROLE_KEY=<the service_role secret>",
+          "",
+          "  This key is server-only. Never prefix it with NEXT_PUBLIC_.",
+          "  Falling back to the anon key so the rest of the app still runs.",
+          "════════════════════════════════════════════════════════════",
+          "",
+        ].join("\n")
+      );
+    }
   }
 
   return createServerClient(
