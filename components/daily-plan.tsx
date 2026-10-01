@@ -123,11 +123,15 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
         setReflection(p.plan_data.evening.reflection || "");
         setMood(p.plan_data.evening.mood || null);
 
-        // Calculate edit window for checked-in plans
         if (p.status === "checked_in" && p.checked_in_at) {
           const checkedInTime = new Date(p.checked_in_at);
-          const deadline = new Date(checkedInTime.getTime() + EDIT_WINDOW_MINUTES * 60 * 1000);
-          const remaining = Math.max(0, Math.floor((deadline.getTime() - Date.now()) / 60000));
+          const deadline = new Date(
+            checkedInTime.getTime() + EDIT_WINDOW_MINUTES * 60 * 1000
+          );
+          const remaining = Math.max(
+            0,
+            Math.floor((deadline.getTime() - Date.now()) / 60000)
+          );
           setEditWindowMinutes(remaining);
 
           if (remaining <= 0) {
@@ -148,6 +152,8 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
   }, []);
 
   useEffect(() => {
+    // Initial fetch on mount — setState inside fetchPlan is intentional.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchPlan();
   }, [fetchPlan]);
 
@@ -159,8 +165,13 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
 
     const interval = setInterval(() => {
       const checkedInTime = new Date(plan.checked_in_at!);
-      const deadline = new Date(checkedInTime.getTime() + EDIT_WINDOW_MINUTES * 60 * 1000);
-      const remaining = Math.max(0, Math.floor((deadline.getTime() - Date.now()) / 60000));
+      const deadline = new Date(
+        checkedInTime.getTime() + EDIT_WINDOW_MINUTES * 60 * 1000
+      );
+      const remaining = Math.max(
+        0,
+        Math.floor((deadline.getTime() - Date.now()) / 60000)
+      );
       setEditWindowMinutes(remaining);
 
       if (remaining <= 0) {
@@ -214,7 +225,9 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
 
   function toggleGoalCompletion(id: string) {
     setGoals((prev) =>
-      prev.map((g) => (g.id === id ? { ...g, is_completed: !g.is_completed } : g))
+      prev.map((g) =>
+        g.id === id ? { ...g, is_completed: !g.is_completed } : g
+      )
     );
   }
 
@@ -248,7 +261,9 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
     const goalsToCarry = carryForward.slice(0, Math.max(0, availableSlots));
 
     if (goalsToCarry.length === 0) {
-      setError(`Cannot carry forward — you already have ${MAX_GOALS} goals. Remove some first.`);
+      setError(
+        `Cannot carry forward — you already have ${MAX_GOALS} goals. Remove some first.`
+      );
       return;
     }
 
@@ -262,7 +277,9 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
     setCarryForward(null);
 
     if (goalsToCarry.length < carryForward.length) {
-      setError(`Only ${goalsToCarry.length} of ${carryForward.length} goals carried forward (max ${MAX_GOALS} goals).`);
+      setError(
+        `Only ${goalsToCarry.length} of ${carryForward.length} goals carried forward (max ${MAX_GOALS} goals).`
+      );
     }
   }
 
@@ -309,7 +326,9 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
       await fetchPlan();
 
       if (status === "committed") {
-        setSuccessMessage("Plan committed! Come back this evening to check in.");
+        setSuccessMessage(
+          "Plan committed! Come back this evening to check in."
+        );
         setIsExpanded(false);
       }
 
@@ -345,20 +364,15 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
   // ============================================
   // DERIVED STATE
   // ============================================
-  // FIX: Evening mode is available when:
-  // - Plan is committed (morning plan done, ready to reflect)
-  // - Plan is checked_in but within edit window (editing after check-in)
-  // - Plan is checked_in and user expanded it (viewing)
-  // Morning mode is available when:
-  // - No plan exists yet
-  // - Plan is draft
-  // - Plan is committed but user hasn't expanded (collapsed amber card)
   const isEvening =
     plan?.status === "committed" ||
     plan?.status === "checked_in" ||
     (!plan && new Date().getHours() >= 15);
 
   const completedGoalCount = goals.filter((g) => g.is_completed).length;
+
+  // Suppress unused-prop warning — kept for future role-based UX
+  void userRole;
 
   // ============================================
   // LOADING STATE
@@ -385,7 +399,9 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
         <CardContent className="py-4">
           <div className="flex items-center gap-3">
             <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
-            <p className="text-sm font-medium text-green-800">{successMessage}</p>
+            <p className="text-sm font-medium text-green-800">
+              {successMessage}
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -455,11 +471,17 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
           <div className="flex items-center gap-2">
             {plan && (
               <Badge variant="outline" className="text-xs capitalize">
-                {plan.status === "draft" ? "Draft" : plan.status.replace("_", " ")}
+                {plan.status === "draft"
+                  ? "Draft"
+                  : plan.status.replace("_", " ")}
               </Badge>
             )}
             {plan && (
-              <Button variant="ghost" size="sm" onClick={() => setIsExpanded(false)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsExpanded(false)}
+              >
                 <X className="h-4 w-4 mr-1" />
                 Collapse
               </Button>
@@ -493,7 +515,6 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
             )}
           </div>
 
-          {/* Goal List */}
           {goals.length > 0 && (
             <div className="space-y-2">
               {goals.map((goal) => (
@@ -514,7 +535,9 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
                             : "border-gray-300 group-hover:border-gray-400"
                         }`}
                       >
-                        {goal.is_completed && <CheckCircle2 className="h-3.5 w-3.5 text-white" />}
+                        {goal.is_completed && (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-white" />
+                        )}
                       </div>
                       <span className="text-sm">{goal.content}</span>
                     </button>
@@ -539,7 +562,6 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
             </div>
           )}
 
-          {/* Empty Goals State */}
           {goals.length === 0 && !isEvening && (
             <div className="rounded-md bg-gray-50 border border-dashed border-gray-300 p-4 text-center">
               <Target className="mx-auto h-6 w-6 text-gray-300 mb-2" />
@@ -550,18 +572,18 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
             </div>
           )}
 
-          {/* Empty Goals — Evening (no goals set but still checking in) */}
           {goals.length === 0 && isEvening && (
             <div className="rounded-md bg-gray-50 border border-dashed border-gray-300 p-4 text-center">
               <Sparkles className="mx-auto h-6 w-6 text-gray-300 mb-2" />
-              <p className="text-sm text-muted-foreground">No goals were set today</p>
+              <p className="text-sm text-muted-foreground">
+                No goals were set today
+              </p>
               <p className="text-xs text-muted-foreground mt-1">
                 You can still record what you accomplished.
               </p>
             </div>
           )}
 
-          {/* Add Goal Input — only in morning mode */}
           {!isEvening && goals.length < MAX_GOALS && (
             <div className="flex gap-2">
               <Input
@@ -613,11 +635,13 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
           <div className="space-y-3">
             <h3 className="text-sm font-semibold flex items-center gap-2">
               <ClipboardCheck className="h-4 w-4 text-blue-600" />
-              Tasks You'll Work On
+              Tasks You&apos;ll Work On
             </h3>
             <div className="space-y-2">
               {acceptedTasks.map((task) => {
-                const isSelected = committedTasks.some((t) => t.task_id === task.id);
+                const isSelected = committedTasks.some(
+                  (t) => t.task_id === task.id
+                );
                 return (
                   <button
                     key={task.id}
@@ -631,14 +655,21 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
                   >
                     <div
                       className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
-                        isSelected ? "bg-blue-500 border-blue-500" : "border-gray-300"
+                        isSelected
+                          ? "bg-blue-500 border-blue-500"
+                          : "border-gray-300"
                       }`}
                     >
-                      {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-white" />}
+                      {isSelected && (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-white" />
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm truncate">{task.title}</p>
-                      <Badge variant="outline" className="text-xs mt-0.5 capitalize">
+                      <Badge
+                        variant="outline"
+                        className="text-xs mt-0.5 capitalize"
+                      >
                         {task.status}
                       </Badge>
                     </div>
@@ -679,7 +710,9 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm font-medium text-blue-800 mb-2">
-                  You have {carryForward.length} unfinished {carryForward.length === 1 ? "goal" : "goals"} from yesterday:
+                  You have {carryForward.length} unfinished{" "}
+                  {carryForward.length === 1 ? "goal" : "goals"} from
+                  yesterday:
                 </p>
                 <ul className="text-sm text-blue-700 list-disc list-inside mb-3">
                   {carryForward.map((g) => (
@@ -720,10 +753,10 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
               Evening Check-In
             </div>
 
-            {/* Accomplishment */}
             <div className="space-y-2">
               <h3 className="text-sm font-semibold">
-                What did you accomplish? <span className="text-destructive">*</span>
+                What did you accomplish?{" "}
+                <span className="text-destructive">*</span>
               </h3>
               <Textarea
                 value={accomplishment}
@@ -737,19 +770,17 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
               />
             </div>
 
-            {/* Blockers */}
             <div className="space-y-2">
               <h3 className="text-sm font-semibold">Any blockers?</h3>
               <Textarea
                 value={blockers}
                 onChange={(e) => setBlockers(e.target.value)}
-                placeholder="What's in your way? What do you need help with?"
+                placeholder="What&apos;s in your way? What do you need help with?"
                 rows={2}
                 className="text-sm resize-none"
               />
             </div>
 
-            {/* Reflection */}
             <div className="space-y-2">
               <h3 className="text-sm font-semibold">Quick reflection</h3>
               <Textarea
@@ -761,14 +792,21 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
               />
             </div>
 
-            {/* Mood */}
             <div className="space-y-2">
-              <h3 className="text-sm font-semibold">How are you feeling?</h3>
-              <div className="flex gap-2 flex-wrap" role="radiogroup" aria-label="Mood">
+              <h3 className="text-sm font-semibold">
+                How are you feeling?
+              </h3>
+              <div
+                className="flex gap-2 flex-wrap"
+                role="radiogroup"
+                aria-label="Mood"
+              >
                 {MOOD_OPTIONS.map((m) => (
                   <button
                     key={m.value}
-                    onClick={() => setMood(mood === m.value ? null : m.value)}
+                    onClick={() =>
+                      setMood(mood === m.value ? null : m.value)
+                    }
                     role="radio"
                     aria-checked={mood === m.value}
                     aria-label={m.label}
@@ -834,7 +872,7 @@ export function DailyPlan({ userRole, acceptedTasks }: DailyPlanProps) {
                 {isSaving
                   ? "Saving..."
                   : plan?.status === "draft" || !plan
-                  ? "Commit to Today's Plan"
+                  ? "Commit to Today&apos;s Plan"
                   : "Update Plan"}
               </Button>
             </>

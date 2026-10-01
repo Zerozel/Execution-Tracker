@@ -6,6 +6,13 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase";
 import { getCurrentUser } from "@/lib/auth";
 
+// Shape of each row returned by the joined tasks query.
+interface CompletedTaskRow {
+  id: string;
+  due_date: string | null;
+  submissions: Array<{ status: string; reviewed_at: string | null }>;
+}
+
 export async function GET() {
   try {
     const user = await getCurrentUser();
@@ -22,14 +29,16 @@ export async function GET() {
     // Get completed tasks with due dates for the current user
     const { data: completedTasks, error: tasksError } = await supabase
       .from("tasks")
-      .select(`
+      .select(
+        `
         id,
         due_date,
         submissions!inner (
           status,
           reviewed_at
         )
-      `)
+      `
+      )
       .eq("owner_id", user.id)
       .eq("status", "completed")
       .eq("is_archived", false)
@@ -44,7 +53,8 @@ export async function GET() {
       );
     }
 
-    const totalCompleted = (completedTasks || []).length;
+    const taskRows = (completedTasks || []) as unknown as CompletedTaskRow[];
+    const totalCompleted = taskRows.length;
 
     if (totalCompleted === 0) {
       return NextResponse.json({
@@ -61,7 +71,7 @@ export async function GET() {
     let onTime = 0;
     let late = 0;
 
-    (completedTasks || []).forEach((task: any) => {
+    taskRows.forEach((task) => {
       const approvedSubmission = task.submissions?.[0];
 
       if (approvedSubmission?.reviewed_at && task.due_date) {

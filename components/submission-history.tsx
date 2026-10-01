@@ -4,12 +4,12 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/utils";
 import { CheckCircle, XCircle, Clock, FileText } from "lucide-react";
 import type { SubmissionWithRelations, AuthUser } from "@/types";
@@ -28,15 +28,13 @@ export function SubmissionHistory({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Rejection state
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectionNote, setRejectionNote] = useState("");
   const [rejectionError, setRejectionError] = useState<string | null>(null);
 
-  // Action loading state
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  async function fetchSubmissions() {
+  const fetchSubmissions = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -56,11 +54,13 @@ export function SubmissionHistory({
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [taskId]);
 
   useEffect(() => {
+    // Initial fetch on mount and when taskId changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchSubmissions();
-  }, [taskId]);
+  }, [fetchSubmissions]);
 
   async function handleApprove(submissionId: string) {
     setActionLoading(submissionId);
@@ -76,7 +76,6 @@ export function SubmissionHistory({
         return;
       }
 
-      // Refresh data
       await fetchSubmissions();
       router.refresh();
     } catch {
@@ -109,7 +108,6 @@ export function SubmissionHistory({
         return;
       }
 
-      // Reset rejection state and refresh data
       setRejectingId(null);
       setRejectionNote("");
       await fetchSubmissions();
@@ -121,7 +119,6 @@ export function SubmissionHistory({
     }
   }
 
-  // Status badge configuration
   function getStatusBadge(status: string) {
     switch (status) {
       case "pending":
@@ -230,14 +227,13 @@ export function SubmissionHistory({
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Submitted by{" "}
-                  {submission.submitter?.display_name || "Unknown"}{" "}
-                  on {formatDateTime(submission.created_at)}
+                  {submission.submitter?.display_name || "Unknown"} on{" "}
+                  {formatDateTime(submission.created_at)}
                 </p>
               </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            {/* Submission Description */}
             <div>
               <h4 className="text-sm font-medium text-muted-foreground">
                 Work Description
@@ -247,7 +243,6 @@ export function SubmissionHistory({
               </p>
             </div>
 
-            {/* Evidence URL */}
             {submission.evidence_url && (
               <div>
                 <h4 className="text-sm font-medium text-muted-foreground">
@@ -264,7 +259,6 @@ export function SubmissionHistory({
               </div>
             )}
 
-            {/* Reviewer Info (for approved/rejected) */}
             {(submission.status === "approved" ||
               submission.status === "rejected") && (
               <div className="rounded-md bg-white p-3 border">
@@ -297,12 +291,10 @@ export function SubmissionHistory({
               </div>
             )}
 
-            {/* Admin Review Actions (only for pending submissions) */}
             {currentUser.role === "admin" &&
               submission.status === "pending" && (
                 <div className="space-y-3 border-t pt-3">
                   {rejectingId === submission.id ? (
-                    /* Rejection Form */
                     <div className="space-y-3">
                       <div className="space-y-2">
                         <label className="text-sm font-medium">
@@ -351,7 +343,6 @@ export function SubmissionHistory({
                       </div>
                     </div>
                   ) : (
-                    /* Approve / Reject Buttons */
                     <div className="flex gap-2">
                       <Button
                         variant="default"

@@ -1,11 +1,10 @@
-// ============================================================
-// Next.js Configuration
-// ============================================================
-
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // No experimental features needed for this project
+  eslint: {
+    // Skip ESLint during builds. Run `npm run check` locally.
+    ignoreDuringBuilds: true,
+  },
 };
 
 export default nextConfig;

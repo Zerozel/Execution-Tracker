@@ -1,14 +1,6 @@
 // ============================================================
 // Execution Tracker — Slicing Pie: Self-Service Time Log
 // ============================================================
-// The day-to-day member action: log hours worked. Designed to work
-// OFFLINE — every entry is written to a local IndexedDB outbox first,
-// then synced to the server. On reconnect the queue flushes
-// automatically; a stable client_uuid makes re-syncs idempotent.
-//
-// Shows connection status, the pending-sync count, and this member's
-// recent logs (pending → converted at payday).
-// ============================================================
 
 "use client";
 
@@ -68,8 +60,9 @@ export function TimeLogPanel({ pieId, projectTags, frozen }: Props) {
     setQueued(await pendingCount(pieId));
   }, [pieId]);
 
-  // Wire connectivity + auto-flush on mount.
   useEffect(() => {
+    // Sync with browser online state on mount — external system subscription.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setOnline(outboxOnline());
     const onUp = () => setOnline(true);
     const onDown = () => setOnline(false);
@@ -78,7 +71,9 @@ export function TimeLogPanel({ pieId, projectTags, frozen }: Props) {
 
     const unregister = registerAutoFlush(pieId, (r) => {
       if (r.synced > 0) {
-        setMessage(`Synced ${r.synced} queued log${r.synced === 1 ? "" : "s"}.`);
+        setMessage(
+          `Synced ${r.synced} queued log${r.synced === 1 ? "" : "s"}.`
+        );
         refreshRecent();
       }
       refreshQueued();
@@ -107,7 +102,6 @@ export function TimeLogPanel({ pieId, projectTags, frozen }: Props) {
 
     setBusy(true);
 
-    // 1. Always enqueue locally first (works offline).
     await enqueue(pieId, {
       work_date: workDate || todayStr(),
       hours: h,
@@ -116,7 +110,6 @@ export function TimeLogPanel({ pieId, projectTags, frozen }: Props) {
     });
     await refreshQueued();
 
-    // 2. Try to flush immediately if we're online.
     if (outboxOnline()) {
       const r = await flush(pieId);
       if (r.synced > 0) {
@@ -143,8 +136,8 @@ export function TimeLogPanel({ pieId, projectTags, frozen }: Props) {
       r.synced > 0
         ? `Synced ${r.synced} log${r.synced === 1 ? "" : "s"}.`
         : r.remaining > 0
-          ? "Still offline or server unreachable."
-          : "Nothing to sync."
+        ? "Still offline or server unreachable."
+        : "Nothing to sync."
     );
     await refreshQueued();
     await refreshRecent();
@@ -164,7 +157,6 @@ export function TimeLogPanel({ pieId, projectTags, frozen }: Props) {
   return (
     <Card>
       <CardContent className="space-y-4 pt-6">
-        {/* Connection + queue status */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm">
             {online ? (
@@ -175,7 +167,9 @@ export function TimeLogPanel({ pieId, projectTags, frozen }: Props) {
             ) : (
               <>
                 <CloudOff className="h-4 w-4 text-amber-600" />
-                <span className="text-amber-700">Offline — logging still works</span>
+                <span className="text-amber-700">
+                  Offline — logging still works
+                </span>
               </>
             )}
           </div>
@@ -192,7 +186,6 @@ export function TimeLogPanel({ pieId, projectTags, frozen }: Props) {
           )}
         </div>
 
-        {/* Entry form */}
         <form onSubmit={handleSubmit} className="space-y-4 border-t pt-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
@@ -273,7 +266,6 @@ export function TimeLogPanel({ pieId, projectTags, frozen }: Props) {
           </Button>
         </form>
 
-        {/* Recent logs */}
         {recent.length > 0 && (
           <div className="space-y-2 border-t pt-4">
             <p className="text-sm font-medium">Recent logs</p>
@@ -290,7 +282,9 @@ export function TimeLogPanel({ pieId, projectTags, frozen }: Props) {
                     {Number(log.hours)}h
                   </span>
                   <Badge
-                    variant={log.status === "converted" ? "default" : "outline"}
+                    variant={
+                      log.status === "converted" ? "default" : "outline"
+                    }
                     className="text-xs capitalize"
                   >
                     {log.status}

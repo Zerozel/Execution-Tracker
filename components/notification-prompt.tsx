@@ -4,21 +4,26 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Bell, BellOff } from "lucide-react";
+import { Bell } from "lucide-react";
+
+/**
+ * Read the initial notification permission synchronously.
+ * Runs once during the first render — no effect, no setState-in-effect.
+ * Returns "default" during SSR so server and client render match.
+ */
+function getInitialPermission(): NotificationPermission | "unsupported" {
+  if (typeof window === "undefined") return "default";
+  if (!("Notification" in window)) return "unsupported";
+  return Notification.permission;
+}
 
 export function NotificationPrompt() {
-  const [permission, setPermission] = useState<NotificationPermission | "unsupported">("default");
+  const [permission, setPermission] = useState<
+    NotificationPermission | "unsupported"
+  >(getInitialPermission);
   const [dismissed, setDismissed] = useState(false);
-
-  useEffect(() => {
-    if (!("Notification" in window)) {
-      setPermission("unsupported");
-      return;
-    }
-    setPermission(Notification.permission);
-  }, []);
 
   async function requestPermission() {
     const result = await Notification.requestPermission();
@@ -26,7 +31,11 @@ export function NotificationPrompt() {
   }
 
   // Don't show if unsupported, already granted, or dismissed
-  if (permission === "granted" || permission === "unsupported" || dismissed) {
+  if (
+    permission === "granted" ||
+    permission === "unsupported" ||
+    dismissed
+  ) {
     return null;
   }
 
@@ -39,7 +48,7 @@ export function NotificationPrompt() {
             Get evening reminders
           </p>
           <p className="text-xs text-amber-700 mt-0.5">
-            We'll remind you if you haven't checked in by 5 PM.
+            We&apos;ll remind you if you haven&apos;t checked in by 5 PM.
           </p>
           <div className="flex items-center gap-2 mt-3">
             <Button

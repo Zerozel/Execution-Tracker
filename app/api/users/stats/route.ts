@@ -16,6 +16,15 @@ export interface UserReliabilityStats {
   reliability_percentage: number | null;
 }
 
+// Shape of each row returned by the joined tasks query.
+interface CompletedTaskRow {
+  id: string;
+  title: string;
+  owner_id: string | null;
+  due_date: string | null;
+  submissions: Array<{ status: string; reviewed_at: string | null }>;
+}
+
 export async function GET() {
   try {
     await requireAdmin();
@@ -39,7 +48,8 @@ export async function GET() {
     // Get all completed tasks with due dates and their approved submissions
     const { data: completedTasks, error: tasksError } = await supabase
       .from("tasks")
-      .select(`
+      .select(
+        `
         id,
         title,
         owner_id,
@@ -48,7 +58,8 @@ export async function GET() {
           status,
           reviewed_at
         )
-      `)
+      `
+      )
       .eq("status", "completed")
       .eq("is_archived", false)
       .not("due_date", "is", null)
@@ -62,10 +73,12 @@ export async function GET() {
       );
     }
 
+    const taskRows = (completedTasks || []) as unknown as CompletedTaskRow[];
+
     // Calculate stats per user
     const stats: UserReliabilityStats[] = (users || []).map((user) => {
-      const userTasks = (completedTasks || []).filter(
-        (task: any) => task.owner_id === user.id
+      const userTasks = taskRows.filter(
+        (task) => task.owner_id === user.id
       );
 
       const totalCompleted = userTasks.length;
@@ -85,18 +98,18 @@ export async function GET() {
       let onTime = 0;
       let late = 0;
 
-      userTasks.forEach((task: any) => {
+      userTasks.forEach((task) => {
         // Get the approved submission's review date (this is when the task was completed)
         const approvedSubmission = task.submissions?.[0];
-        
+
         if (approvedSubmission?.reviewed_at && task.due_date) {
           const completedDate = new Date(approvedSubmission.reviewed_at);
           const dueDate = new Date(task.due_date);
-          
+
           // Set both to start of day for fair comparison
           completedDate.setHours(0, 0, 0, 0);
           dueDate.setHours(0, 0, 0, 0);
-          
+
           if (completedDate <= dueDate) {
             onTime++;
           } else {
@@ -120,7 +133,11 @@ export async function GET() {
 
     // Sort by reliability (highest first), users with no data at bottom
     stats.sort((a, b) => {
-      if (a.reliability_percentage === null && b.reliability_percentage === null) return 0;
+      if (
+        a.reliability_percentage === null &&
+        b.reliability_percentage === null
+      )
+        return 0;
       if (a.reliability_percentage === null) return 1;
       if (b.reliability_percentage === null) return -1;
       return b.reliability_percentage - a.reliability_percentage;

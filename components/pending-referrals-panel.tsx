@@ -1,16 +1,6 @@
 // ============================================================
 // Execution Tracker — Slicing Pie: Pending Referrals Panel
 // ============================================================
-// A referral fee is recorded the day it is entered but holds no slices
-// until the referred hire has stayed the configured waiting period
-// (CONFIG-016). This panel shows what is waiting, when each one switches
-// on, and lets an admin grant everything whose date has arrived.
-//
-// Granting is a deliberate click rather than something that happens on
-// its own: slices appearing in the cap table is a change in ownership,
-// and ownership changes should be something a person chose to do.
-// Admin only (the route enforces it too).
-// ============================================================
 
 "use client";
 
@@ -54,12 +44,13 @@ export function PendingReferralsPanel({ pieId, currency, participants }: Props) 
       const body = await res.json();
       if (res.ok) setRows(body.data ?? []);
     } catch {
-      // A failed read here is not worth interrupting the page for; the
-      // grant button below reports its own errors.
+      // A failed read here is not worth interrupting the page for.
     }
   }, [pieId]);
 
   useEffect(() => {
+    // Initial load on mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
 
@@ -96,14 +87,6 @@ export function PendingReferralsPanel({ pieId, currency, participants }: Props) 
   const dueCount = outstanding.filter((r) => r.due).length;
   const waiting = outstanding.filter((r) => !r.due);
 
-  // Hide in the ordinary state — a Pie whose referrals have all been
-  // granted has nothing to show. The exception is a grant that has just
-  // finished: the pending row survives the grant (that is the whole point
-  // of appending rather than editing), so `rows` stays non-empty forever
-  // after the first referral and this card would otherwise sit on the
-  // dashboard permanently showing a zero. Keeping it while there is a
-  // message or an error lets the confirmation be read; the next full page
-  // load clears it.
   if (outstanding.length === 0 && !message && !error) return null;
 
   return (
@@ -171,10 +154,10 @@ export function PendingReferralsPanel({ pieId, currency, participants }: Props) 
           {isLoading
             ? "Granting…"
             : dueCount === 0
-              ? waiting.length > 0
-                ? `Nothing due yet (${waiting.length} waiting)`
-                : "Nothing to grant"
-              : `Grant ${dueCount} due referral${dueCount === 1 ? "" : "s"}`}
+            ? waiting.length > 0
+              ? `Nothing due yet (${waiting.length} waiting)`
+              : "Nothing to grant"
+            : `Grant ${dueCount} due referral${dueCount === 1 ? "" : "s"}`}
         </Button>
       </CardContent>
     </Card>

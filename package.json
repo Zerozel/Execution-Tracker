@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "lint:errors": "next lint --max-warnings 0 --quiet",
+    "check": "tsc --noEmit && next lint --quiet",
     "test": "tsc -p tsconfig.test.json && node .test-dist/lib/slicing-pie/__tests__/run-all.js"
   },
   "dependencies": {

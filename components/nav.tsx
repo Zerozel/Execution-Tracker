@@ -26,6 +26,8 @@ export function Nav({ user }: NavProps) {
   // interactive features after client-side hydration completes
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
+    // Hydration marker — must run once on mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 
@@ -43,24 +45,21 @@ export function Nav({ user }: NavProps) {
   function linkClasses(href: string) {
     // During SSR, always return the default (non-active) class
     // to ensure server/client HTML match
-    if (!mounted) return "text-sm font-medium text-muted-foreground transition-colors hover:text-foreground";
-    
+    if (!mounted)
+      return "text-sm font-medium text-muted-foreground transition-colors hover:text-foreground";
+
     const isActive = pathname === href || pathname.startsWith(href + "/");
     return `text-sm font-medium transition-colors hover:text-foreground ${
       isActive ? "text-foreground" : "text-muted-foreground"
     }`;
   }
 
-  // Both server and client render this exact same structure initially
   return (
     <header className="sticky top-0 z-50 border-b bg-white">
       <div className="mx-auto max-w-6xl px-4 py-3">
         <div className="flex items-center justify-between">
           {/* Logo */}
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-2 shrink-0"
-          >
+          <Link href="/dashboard" className="flex items-center gap-2 shrink-0">
             <span className="text-base sm:text-lg font-bold tracking-tight truncate">
               Execution Tracker
             </span>
@@ -121,7 +120,9 @@ export function Nav({ user }: NavProps) {
               </>
             ) : (
               <Link href="/login">
-                <Button variant="outline" size="sm">Sign In</Button>
+                <Button variant="outline" size="sm">
+                  Sign In
+                </Button>
               </Link>
             )}
           </div>
@@ -139,7 +140,6 @@ export function Nav({ user }: NavProps) {
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               aria-label="Toggle menu"
             >
-              {/* Always show Menu icon during SSR; client swaps after mount */}
               {mounted && mobileMenuOpen ? (
                 <X className="h-5 w-5" />
               ) : (

@@ -6,6 +6,13 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase";
 import { getCurrentUser } from "@/lib/auth";
 
+// Shape of the plan_data.morning.goals array from stored JSONB.
+interface StoredGoal {
+  id: string;
+  content: string;
+  is_completed: boolean;
+}
+
 export async function GET() {
   try {
     const user = await getCurrentUser();
@@ -63,9 +70,11 @@ export async function GET() {
       yesterdayPlan?.plan_data?.morning?.goals &&
       Array.isArray(yesterdayPlan.plan_data.morning.goals)
     ) {
-      const unfinishedGoals = yesterdayPlan.plan_data.morning.goals
-        .filter((g: any) => !g.is_completed)
-        .map((g: any) => ({
+      const unfinishedGoals = (
+        yesterdayPlan.plan_data.morning.goals as StoredGoal[]
+      )
+        .filter((g) => !g.is_completed)
+        .map((g) => ({
           goal_id: g.id,
           content: g.content,
         }));

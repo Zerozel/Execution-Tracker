@@ -15,6 +15,44 @@ const MAX_GOALS_PER_PLAN = 10;
 const MAX_COMMITTED_TASKS = 20;
 const EDIT_WINDOW_MINUTES = 30;
 
+// Shape of the client-submitted payload we validate against.
+interface PlanGoalInput {
+  id: string;
+  content: string;
+  is_completed: boolean;
+}
+
+interface PlanTaskCommitInput {
+  task_id: string;
+  title?: string;
+  status_when_committed?: string;
+}
+
+interface PlanMorningInput {
+  goals?: PlanGoalInput[];
+  committed_tasks?: PlanTaskCommitInput[];
+  note?: string | null;
+}
+
+interface PlanEveningInput {
+  accomplishment?: string | null;
+  blockers?: string | null;
+  reflection?: string | null;
+  mood?: string | null;
+  reflection_history?: Array<{ time: string; content: string }>;
+}
+
+interface PlanDataInput {
+  morning?: PlanMorningInput;
+  evening?: PlanEveningInput;
+  [key: string]: unknown;
+}
+
+interface PlanRequestBody {
+  plan_data?: PlanDataInput;
+  status?: unknown;
+}
+
 export async function POST(request: Request) {
   try {
     const user = await getCurrentUser();
@@ -27,7 +65,7 @@ export async function POST(request: Request) {
     }
 
     // Parse and validate body
-    let body: any;
+    let body: unknown;
     try {
       body = await request.json();
     } catch {
@@ -38,14 +76,14 @@ export async function POST(request: Request) {
     }
 
     // Edge case: empty body
-    if (!body || Object.keys(body).length === 0) {
+    if (!body || typeof body !== "object" || Object.keys(body).length === 0) {
       return NextResponse.json(
         { error: "Request body is required" },
         { status: 400 }
       );
     }
 
-    const { plan_data, status } = body;
+    const { plan_data, status } = body as PlanRequestBody;
 
     // Edge case: missing plan_data
     if (!plan_data) {
@@ -64,7 +102,11 @@ export async function POST(request: Request) {
     }
 
     // Edge case: invalid status
-    if (!status || !["draft", "committed", "checked_in"].includes(status)) {
+    if (
+      !status ||
+      typeof status !== "string" ||
+      !["draft", "committed", "checked_in"].includes(status)
+    ) {
       return NextResponse.json(
         { error: "Status must be 'draft', 'committed', or 'checked_in'" },
         { status: 400 }
@@ -121,7 +163,11 @@ export async function POST(request: Request) {
           );
         }
 
-        if (!goal.content || typeof goal.content !== "string" || !goal.content.trim()) {
+        if (
+          !goal.content ||
+          typeof goal.content !== "string" ||
+          !goal.content.trim()
+        ) {
           return NextResponse.json(
             { error: `Goal at index ${i} must have non-empty content` },
             { status: 400 }
@@ -130,14 +176,18 @@ export async function POST(request: Request) {
 
         if (goal.content.length > MAX_GOAL_LENGTH) {
           return NextResponse.json(
-            { error: `Goal content must be under ${MAX_GOAL_LENGTH} characters` },
+            {
+              error: `Goal content must be under ${MAX_GOAL_LENGTH} characters`,
+            },
             { status: 400 }
           );
         }
 
         if (typeof goal.is_completed !== "boolean") {
           return NextResponse.json(
-            { error: `Goal at index ${i} must have a boolean is_completed field` },
+            {
+              error: `Goal at index ${i} must have a boolean is_completed field`,
+            },
             { status: 400 }
           );
         }
@@ -154,7 +204,9 @@ export async function POST(request: Request) {
 
         if (plan_data.morning.committed_tasks.length > MAX_COMMITTED_TASKS) {
           return NextResponse.json(
-            { error: `Maximum ${MAX_COMMITTED_TASKS} committed tasks allowed` },
+            {
+              error: `Maximum ${MAX_COMMITTED_TASKS} committed tasks allowed`,
+            },
             { status: 400 }
           );
         }
@@ -171,7 +223,9 @@ export async function POST(request: Request) {
 
           if (!task.task_id || typeof task.task_id !== "string") {
             return NextResponse.json(
-              { error: `Committed task at index ${i} must have a string task_id` },
+              {
+                error: `Committed task at index ${i} must have a string task_id`,
+              },
               { status: 400 }
             );
           }
@@ -189,7 +243,9 @@ export async function POST(request: Request) {
 
         if (plan_data.morning.note.length > MAX_NOTE_LENGTH) {
           return NextResponse.json(
-            { error: `Morning note must be under ${MAX_NOTE_LENGTH} characters` },
+            {
+              error: `Morning note must be under ${MAX_NOTE_LENGTH} characters`,
+            },
             { status: 400 }
           );
         }
@@ -209,7 +265,11 @@ export async function POST(request: Request) {
       }
 
       // Accomplishment is required
-      if (!plan_data.evening.accomplishment || typeof plan_data.evening.accomplishment !== "string" || !plan_data.evening.accomplishment.trim()) {
+      if (
+        !plan_data.evening.accomplishment ||
+        typeof plan_data.evening.accomplishment !== "string" ||
+        !plan_data.evening.accomplishment.trim()
+      ) {
         return NextResponse.json(
           { error: "Accomplishment is required for check-in" },
           { status: 400 }
@@ -217,36 +277,59 @@ export async function POST(request: Request) {
       }
 
       // Accomplishment max length
-      if (plan_data.evening.accomplishment.length > MAX_ACCOMPLISHMENT_LENGTH) {
+      if (
+        plan_data.evening.accomplishment.length > MAX_ACCOMPLISHMENT_LENGTH
+      ) {
         return NextResponse.json(
-          { error: `Accomplishment must be under ${MAX_ACCOMPLISHMENT_LENGTH} characters` },
+          {
+            error: `Accomplishment must be under ${MAX_ACCOMPLISHMENT_LENGTH} characters`,
+          },
           { status: 400 }
         );
       }
 
       // Blockers max length
-      if (plan_data.evening.blockers && typeof plan_data.evening.blockers === "string") {
+      if (
+        plan_data.evening.blockers &&
+        typeof plan_data.evening.blockers === "string"
+      ) {
         if (plan_data.evening.blockers.length > MAX_BLOCKERS_LENGTH) {
           return NextResponse.json(
-            { error: `Blockers must be under ${MAX_BLOCKERS_LENGTH} characters` },
+            {
+              error: `Blockers must be under ${MAX_BLOCKERS_LENGTH} characters`,
+            },
             { status: 400 }
           );
         }
       }
 
       // Reflection max length
-      if (plan_data.evening.reflection && typeof plan_data.evening.reflection === "string") {
+      if (
+        plan_data.evening.reflection &&
+        typeof plan_data.evening.reflection === "string"
+      ) {
         if (plan_data.evening.reflection.length > MAX_REFLECTION_LENGTH) {
           return NextResponse.json(
-            { error: `Reflection must be under ${MAX_REFLECTION_LENGTH} characters` },
+            {
+              error: `Reflection must be under ${MAX_REFLECTION_LENGTH} characters`,
+            },
             { status: 400 }
           );
         }
       }
 
       // Validate mood if provided
-      const VALID_MOODS = ["great", "good", "okay", "struggling", "stressed"];
-      if (plan_data.evening.mood && !VALID_MOODS.includes(plan_data.evening.mood)) {
+      const VALID_MOODS = [
+        "great",
+        "good",
+        "okay",
+        "struggling",
+        "stressed",
+      ];
+      if (
+        plan_data.evening.mood &&
+        !VALID_MOODS.includes(plan_data.evening.mood)
+      ) {
         return NextResponse.json(
           { error: `Mood must be one of: ${VALID_MOODS.join(", ")}` },
           { status: 400 }
@@ -291,7 +374,8 @@ export async function POST(request: Request) {
 
       // Within edit window — allow append-only updates
       if (plan_data.evening?.accomplishment && existingPlan.plan_data) {
-        const currentEvening = existingPlan.plan_data?.evening || {};
+        const currentEvening =
+          (existingPlan.plan_data as PlanDataInput)?.evening || {};
         const originalAccomplishment = currentEvening.accomplishment || "";
         const newAccomplishment = plan_data.evening.accomplishment || "";
 
@@ -305,13 +389,16 @@ export async function POST(request: Request) {
           plan_data.evening.accomplishment =
             originalAccomplishment +
             (originalAccomplishment ? "\n\n" : "") +
-            `[Edit ${timestamp}] ${newAccomplishment.replace(originalAccomplishment, "").trim()}`;
+            `[Edit ${timestamp}] ${newAccomplishment
+              .replace(originalAccomplishment, "")
+              .trim()}`;
         }
 
         // Append to reflection history
         if (plan_data.evening?.reflection && currentEvening.reflection) {
           if (!plan_data.evening.reflection_history) {
-            plan_data.evening.reflection_history = currentEvening.reflection_history || [];
+            plan_data.evening.reflection_history =
+              currentEvening.reflection_history || [];
           }
 
           if (plan_data.evening.reflection !== currentEvening.reflection) {
@@ -343,7 +430,7 @@ export async function POST(request: Request) {
     // UPSERT
     // ============================================
 
-    const upsertData: Record<string, any> = {
+    const upsertData: Record<string, unknown> = {
       user_id: user.id,
       plan_date: today,
       status,

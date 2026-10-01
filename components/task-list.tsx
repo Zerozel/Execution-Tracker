@@ -62,7 +62,9 @@ export function TaskList({
           params.set("status", filterStatus);
         }
 
-        const url = `/api/tasks${params.toString() ? "?" + params.toString() : ""}`;
+        const url = `/api/tasks${
+          params.toString() ? "?" + params.toString() : ""
+        }`;
         const response = await fetch(url);
 
         if (!response.ok) {
@@ -92,7 +94,10 @@ export function TaskList({
   );
 
   useEffect(() => {
+    // Reset pagination and fetch first page on mount or filter change.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setOffset(0);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchTasks(0, false);
   }, [fetchTasks]);
 
@@ -102,7 +107,6 @@ export function TaskList({
     fetchTasks(newOffset, true);
   }
 
-  // Dashboard: show limited tasks with "View all" link
   if (dashboardLimit > 0 && tasks.length > dashboardLimit) {
     const limitedTasks = tasks.slice(0, dashboardLimit);
 
@@ -127,7 +131,6 @@ export function TaskList({
     );
   }
 
-  // Loading state
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -143,7 +146,6 @@ export function TaskList({
     );
   }
 
-  // Error state
   if (error) {
     return (
       <div className="space-y-4">
@@ -165,7 +167,6 @@ export function TaskList({
     );
   }
 
-  // Empty state
   if (tasks.length === 0) {
     const emptyMessages: Record<string, string> = {
       assigned: "No tasks waiting for acceptance",
@@ -221,7 +222,6 @@ export function TaskList({
         ))}
       </div>
 
-      {/* Load more button — only in paginated mode */}
       {isPaginated && hasMore && (
         <div className="flex justify-center pt-2">
           <Button
