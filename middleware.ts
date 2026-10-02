@@ -1,6 +1,15 @@
 // ============================================================
 // Execution Tracker — Middleware (Production Hardened)
 // ============================================================
+// Protects every route except the ones listed as public.
+//
+// History: an earlier version also redirected logged-in users AWAY
+// from /login to /dashboard. That created a redirect loop whenever a
+// cookie survived a user row being deleted — the middleware trusted
+// the cookie's presence, the page trusted the database, and the two
+// disagreed. The login page now decides for itself whether to skip
+// the form, and the middleware never redirects to /dashboard.
+// ============================================================
 
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
@@ -28,51 +37,39 @@ const PUBLIC_PATHS = [
 const PUBLIC_PREFIXES = [
   "/_next",
   "/favicon.ico",
+  "/api/auth/",
+  "/api/daily-plan/",
 ];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow public paths without any auth check
+  // Always allow public paths without any auth check.
   if (PUBLIC_PATHS.includes(pathname)) {
-    // If user is already logged in and on login page, redirect to dashboard
-    if (pathname === "/login") {
-      const userId = request.cookies.get("user_id")?.value;
-      if (userId && UUID_REGEX.test(userId)) {
-        return NextResponse.redirect(new URL("/dashboard", request.url));
-      }
-    }
     return NextResponse.next();
   }
 
-  // Allow public prefixes (static files, Next.js internals)
+  // Always allow public prefixes (static files, Next.js internals,
+  // auth endpoints, daily-plan endpoints that handle their own auth).
   for (const prefix of PUBLIC_PREFIXES) {
     if (pathname.startsWith(prefix)) {
       return NextResponse.next();
     }
   }
 
-  // Allow API auth endpoints specifically
-  if (pathname.startsWith("/api/auth/")) {
-    return NextResponse.next();
-  }
-  
-  // Allow daily-plan API endpoints (they handle their own auth)
-if (pathname.startsWith("/api/daily-plan/")) {
-  return NextResponse.next();
-}
-
-  // For all other routes, check authentication
+  // For all other routes, require a valid-looking user_id cookie.
+  // The cookie is a coarse filter: page-level getCurrentUser() does
+  // the authoritative check against the database. If a stale cookie
+  // gets through here but the user no longer exists, the page will
+  // redirect to /login and the login page will clear the cookie.
   const userId = request.cookies.get("user_id")?.value;
   const isAuthenticated = !!userId && UUID_REGEX.test(userId);
 
-  // If not authenticated, redirect to login
   if (!isAuthenticated) {
     const loginUrl = new URL("/login", request.url);
     return NextResponse.redirect(loginUrl);
   }
 
-  // Authenticated — allow the request
   return NextResponse.next();
 }
 
@@ -83,7 +80,8 @@ if (pathname.startsWith("/api/daily-plan/")) {
  * - Static files (_next/static)
  * - Image optimization (_next/image)
  * - Favicon
- * - Common static assets (images, fonts, etc.)
+ * - Manifest, service worker, offline fallback
+ * - Common static assets (images, fonts, JSON)
  */
 export const config = {
   matcher: [
