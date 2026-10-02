@@ -1,9 +1,16 @@
 // ============================================================
 // Execution Tracker — GET /api/pies/[id]/work-sessions/active
 // ============================================================
-// Returns the caller's own active session on this Pie, or null.
-// Applies the lazy timeout check (see resolveSessionState) before
-// returning — a stale session is closed and reported as ended.
+// Returns the caller's work-session state on this Pie:
+//
+//   active                — the currently open session, or null
+//   entries               — the entries attached to that session
+//   awaiting_explanation  — ended sessions where the entry total
+//                           falls short of counted_minutes and no
+//                           explanation has been submitted yet
+//
+// Applies the lazy timeout check to the active session before
+// returning. Sessions awaiting explanation are listed newest first.
 // ============================================================
 
 import { createClient } from "@/lib/supabase";
@@ -19,63 +26,6 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
-export async function GET(_request: Request, context: RouteContext) {
-  try {
-    const { user, response } = await requireUser();
-    if (response) return response;
-
-    const { id } = await context.params;
-    if (!isUuid(id)) return fail("Invalid pie id", 400);
-
-    const me = await participantForUser(id, user.id);
-    if (!me) return ok(null);
-
-    const supabase = await createClient();
-    const { data: session, error } = await supabase
-      .from("work_sessions")
-      .select("*")
-      .eq("pie_id", id)
-      .eq("participant_id", me.id)
-      .is("ended_at", null)
-      .maybeSingle();
-
-    if (error) {
-      console.error("Error fetching active session:", error);
-      return fail("Failed to fetch active session", 500);
-    }
-
-    if (!session) return ok(null);
-
-    // Lazy timeout check.
-    const closed = await resolveSessionState(supabase, session);
-    if (closed.ended_at) {
-      // Session was just closed by the resolver — return null to the
-      // caller because there is no active session any more.
-      return ok(null, 200);
-    }
-
-    // Attach entries for the member UI.
-    const { data: entries } = await supabase
-      .from("work_session_entries")
-      .select("*")
-      .eq("session_id", session.id)
-      .order("logged_at", { ascending: true });
-
-    return ok({ ...closed, entries: entries ?? [] });
-  } catch (err) {
-    console.error("Unexpected error in active:", err);
-    return fail("Internal server error", 500);
-  }
-}
-
-// ------------------------------------------------------------
-// Lazy timeout resolver
-// ------------------------------------------------------------
-// Same logic the architecture document specifies: if the session
-// has been without a heartbeat for 2h, close it at the last heartbeat.
-// If it never had an entry and is over 2h old, close it with zero
-// minutes. If it has run over 12h, cap it.
-
 interface SessionRow {
   id: string;
   pie_id: string;
@@ -89,8 +39,133 @@ interface SessionRow {
   counted_minutes: number | null;
 }
 
-const GRACE_MS = 2 * 60 * 60 * 1000;
-const MAX_MS = 12 * 60 * 60 * 1000;
+interface EntryRow {
+  id: string;
+  session_id: string;
+  logged_at: string;
+  minutes: number;
+  description: string;
+}
+
+const GRACE_MS = 2 * 60 * 60 * 1000;   // 2h no-heartbeat → timeout
+const MAX_MS = 12 * 60 * 60 * 1000;    // 12h cap
+const GAP_GRACE_MINUTES = 15;          // trivial gap — do not prompt
+
+export async function GET(_request: Request, context: RouteContext) {
+  try {
+    const { user, response } = await requireUser();
+    if (response) return response;
+
+    const { id } = await context.params;
+    if (!isUuid(id)) return fail("Invalid pie id", 400);
+
+    const me = await participantForUser(id, user.id);
+    if (!me) {
+      return ok({ active: null, entries: [], awaiting_explanation: [] });
+    }
+
+    const supabase = await createClient();
+
+    // 1. The active session (if any) and its entries.
+    const { data: activeData, error: activeError } = await supabase
+      .from("work_sessions")
+      .select("*")
+      .eq("pie_id", id)
+      .eq("participant_id", me.id)
+      .is("ended_at", null)
+      .maybeSingle();
+
+    if (activeError) {
+      console.error("Error fetching active session:", activeError);
+      return fail("Failed to fetch active session", 500);
+    }
+
+    let active: SessionRow | null = (activeData as SessionRow) ?? null;
+    let entries: EntryRow[] = [];
+
+    if (active) {
+      // Lazy timeout check — a stale session closes before we return.
+      const closed = await resolveSessionState(supabase, active);
+      if (closed.ended_at) {
+        // Session was just auto-closed by the resolver.
+        active = null;
+      } else {
+        active = closed;
+        const { data: entryData } = await supabase
+          .from("work_session_entries")
+          .select("*")
+          .eq("session_id", active.id)
+          .order("logged_at", { ascending: true });
+        entries = (entryData ?? []) as EntryRow[];
+      }
+    }
+
+    // 2. Ended sessions awaiting explanation.
+    // Only the caller's own sessions, only unexplained, newest first.
+    const { data: endedData } = await supabase
+      .from("work_sessions")
+      .select("*")
+      .eq("pie_id", id)
+      .eq("participant_id", me.id)
+      .not("ended_at", "is", null)
+      .is("explained_at", null)
+      .order("started_at", { ascending: false })
+      .limit(20);
+
+    const endedRows = (endedData ?? []) as SessionRow[];
+    const awaiting: Array<
+      SessionRow & { entry_total_minutes: number; gap_minutes: number }
+    > = [];
+
+    for (const s of endedRows) {
+      const { data: entryRows } = await supabase
+        .from("work_session_entries")
+        .select("minutes")
+        .eq("session_id", s.id);
+
+      const entryTotal = (entryRows ?? []).reduce(
+        (sum, e) => sum + (e.minutes ?? 0),
+        0
+      );
+      const countedTotal = s.counted_minutes ?? 0;
+      const gap = countedTotal - entryTotal;
+
+      // Meaningful gap → worth prompting
+      const hasGap =
+        gap > GAP_GRACE_MINUTES ||
+        (countedTotal === 0 && entryTotal === 0);
+
+      if (hasGap) {
+        awaiting.push({
+          ...s,
+          entry_total_minutes: entryTotal,
+          gap_minutes: gap,
+        });
+      }
+    }
+
+    return ok({
+      active,
+      entries,
+      awaiting_explanation: awaiting,
+    });
+  } catch (err) {
+    console.error("Unexpected error in active:", err);
+    return fail("Internal server error", 500);
+  }
+}
+
+// ------------------------------------------------------------
+// Lazy timeout resolver
+// ------------------------------------------------------------
+// Same rules as working-now: 2h without heartbeat closes the session
+// at the last heartbeat; sessions with no entries and over 2h old
+// close with zero minutes; sessions running over 12h are capped.
+//
+// When the resolver closes a session, it does NOT create a time_logs
+// row. Under the explanation model, an unexplained close is a prompt
+// to the member, not an automatic log. The member submits the
+// explanation, and the explain endpoint creates the log.
 
 async function resolveSessionState(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -106,7 +181,6 @@ async function resolveSessionState(
     : null;
 
   let endReason: string | null = null;
-
   if (now - lastHb > GRACE_MS) endReason = "timeout";
   else if (!lastEntry && now - started > GRACE_MS) endReason = "no_entries";
   else if (now - started > MAX_MS) endReason = "capped";
@@ -128,22 +202,6 @@ async function resolveSessionState(
       counted_minutes: finalCounted,
     })
     .eq("id", session.id);
-
-  if (finalCounted > 0) {
-    const workDate = new Date(session.started_at).toISOString().split("T")[0];
-    await supabase.from("time_logs").insert({
-      pie_id: session.pie_id,
-      participant_id: session.participant_id,
-      user_id: session.user_id,
-      work_date: workDate,
-      hours: finalCounted / 60,
-      notes: `Session auto-closed (${endReason})`,
-      status: "pending",
-      session_id: session.id,
-      review_status: "pending",
-      created_by: session.user_id,
-    });
-  }
 
   return {
     ...session,

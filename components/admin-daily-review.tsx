@@ -1,9 +1,13 @@
 // ============================================================
 // Execution Tracker — Admin Daily Review Panel
 // ============================================================
-// Lists today's sessions grouped by participant. Each group has an
-// Approve-day button (bulk approves every pending log by that person
-// today) and per-session flag/reject actions.
+// Renders on the Pie dashboard. Shows:
+//   • Today's sessions grouped by participant
+//   • Explained sessions with the member's words attached
+//   • Empty sessions with a "no entries" badge and a Dismiss action
+//   • Time logs awaiting review with Approve / Flag / Reject
+//
+// Never returns null on empty — always shows an explicit empty state.
 // ============================================================
 
 "use client";
@@ -33,6 +37,9 @@ interface Session {
   end_reason: string | null;
   counted_minutes: number | null;
   entries: Entry[];
+  member_explanation?: string | null;
+  declared_minutes?: number | null;
+  explained_at?: string | null;
 }
 
 interface TimeLog {
@@ -64,12 +71,20 @@ const REVIEW_STATUS_CLASS: Record<TimeLog["review_status"], string> = {
   void: "bg-red-100 text-red-700 border-red-300",
 };
 
+function fmtTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 export function AdminDailyReview({ pieId }: Props) {
   const router = useRouter();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [logs, setLogs] = useState<TimeLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectNote, setRejectNote] = useState("");
   const [flaggingId, setFlaggingId] = useState<string | null>(null);
@@ -136,12 +151,39 @@ export function AdminDailyReview({ pieId }: Props) {
     }
   }
 
-  if (isLoading) return null;
-  if (sessions.length === 0 && logs.length === 0) return null;
+  function dismissSession(sessionId: string) {
+    setDismissed((prev) => {
+      const next = new Set(prev);
+      next.add(sessionId);
+      return next;
+    });
+  }
 
-  // Group sessions by participant
+  if (isLoading) return null;
+
+  const visibleSessions = sessions.filter((s) => !dismissed.has(s.id));
+  const hasAnything = visibleSessions.length > 0 || logs.length > 0;
+
+  if (!hasAnything) {
+    return (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <ClipboardCheck className="h-4 w-4 text-indigo-600" />
+            Today&apos;s work
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            No sessions or logs to review today.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const sessionsByParticipant = new Map<string, Session[]>();
-  for (const s of sessions) {
+  for (const s of visibleSessions) {
     const list = sessionsByParticipant.get(s.participant_id) ?? [];
     list.push(s);
     sessionsByParticipant.set(s.participant_id, list);
@@ -164,18 +206,14 @@ export function AdminDailyReview({ pieId }: Props) {
           </p>
         )}
 
-        {participants.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            No sessions today yet.
-          </p>
-        )}
-
         {participants.map((pid) => {
           const pSessions = sessionsByParticipant.get(pid) ?? [];
           const name = pSessions[0]?.participant_name ?? "Unknown";
           const role = pSessions[0]?.participant_role ?? null;
           const pLogs = logs.filter((l) => l.participant_id === pid);
-          const pendingCount = pLogs.filter((l) => l.review_status === "pending").length;
+          const pendingCount = pLogs.filter(
+            (l) => l.review_status === "pending"
+          ).length;
 
           return (
             <div key={pid} className="space-y-3 border-t pt-4 first:border-t-0 first:pt-0">
@@ -202,113 +240,167 @@ export function AdminDailyReview({ pieId }: Props) {
               </div>
 
               {/* Sessions */}
-              {pSessions.map((s) => (
-                <div key={s.id} className="rounded-md border bg-muted/30 p-3 text-sm space-y-2">
-                  <div className="flex items-center justify-between gap-2 text-xs">
-                    <span className="tabular-nums text-muted-foreground">
-                      {new Date(s.started_at).toLocaleTimeString("en-US", {
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}
-                      {" → "}
-                      {s.ended_at
-                        ? new Date(s.ended_at).toLocaleTimeString("en-US", {
-                            hour: "numeric",
-                            minute: "2-digit",
-                          })
-                        : "in progress"}
-                    </span>
-                    {s.ended_at ? (
-                      <Badge variant="outline" className="text-xs">
-                        {s.end_reason === "manual" ? "Stopped" : `Auto: ${s.end_reason}`}
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="bg-green-100 text-green-700 border-green-300 text-xs">
-                        Active
-                      </Badge>
-                    )}
-                  </div>
-                  {s.entries.map((e) => (
-                    <p key={e.id} className="text-sm whitespace-pre-wrap">
-                      <span className="text-xs text-muted-foreground tabular-nums">
-                        {new Date(e.logged_at).toLocaleTimeString("en-US", {
-                          hour: "numeric",
-                          minute: "2-digit",
-                        })}
-                        {" · "}
-                      </span>
-                      {e.description}
-                    </p>
-                  ))}
-                </div>
-              ))}
+              {pSessions.map((s) => {
+                const isEmpty = (s.entries?.length ?? 0) === 0;
+                const hasExplanation = !!s.explained_at;
+                const totalMinutes = s.entries.reduce(
+                  (sum, e) => sum + (e.minutes ?? 0),
+                  0
+                );
 
-              {/* Time logs pending review */}
-              {pLogs.length > 0 && (
-                <div className="space-y-2">
-                  {pLogs.map((log) => (
-                    <div
-                      key={log.id}
-                      className="flex items-start justify-between gap-3 rounded-md border p-3 text-sm"
-                    >
-                      <div className="min-w-0">
-                        <p className="font-medium tabular-nums">
-                          {log.work_date} · {Number(log.hours).toFixed(2)}h
-                        </p>
-                        {log.notes && (
-                          <p className="text-xs text-muted-foreground">
-                            {log.notes}
-                          </p>
+                return (
+                  <div
+                    key={s.id}
+                    className={`rounded-md border p-3 text-sm space-y-2 ${
+                      isEmpty && !hasExplanation
+                        ? "border-amber-200 bg-amber-50/40"
+                        : "bg-muted/30"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2 text-xs">
+                      <span className="tabular-nums text-muted-foreground">
+                        {fmtTime(s.started_at)}
+                        {" → "}
+                        {s.ended_at ? fmtTime(s.ended_at) : "in progress"}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {s.ended_at && s.end_reason !== "manual" && (
+                          <Badge variant="outline" className="text-xs">
+                            Auto: {s.end_reason}
+                          </Badge>
                         )}
-                        {log.review_note && (
-                          <p className="mt-1 text-xs text-amber-700">
-                            Note: {log.review_note}
-                          </p>
+                        {isEmpty && !hasExplanation && (
+                          <Badge
+                            variant="outline"
+                            className="text-xs bg-amber-100 text-amber-700 border-amber-300"
+                          >
+                            No entries — waiting
+                          </Badge>
                         )}
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <Badge
-                          variant="outline"
-                          className={`text-xs ${REVIEW_STATUS_CLASS[log.review_status]}`}
-                        >
-                          {REVIEW_STATUS_LABEL[log.review_status]}
-                        </Badge>
-                        {log.review_status === "pending" && (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              disabled={busy === log.id}
-                              onClick={() => review(log.id, "approve")}
-                              title="Approve"
-                            >
-                              <CheckCircle className="h-4 w-4 text-green-600" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              disabled={busy === log.id}
-                              onClick={() => setFlaggingId(log.id)}
-                              title="Flag for review"
-                            >
-                              <Flag className="h-4 w-4 text-amber-600" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              disabled={busy === log.id}
-                              onClick={() => setRejectingId(log.id)}
-                              title="Reject"
-                            >
-                              <XCircle className="h-4 w-4 text-red-600" />
-                            </Button>
-                          </>
+                        {hasExplanation && (
+                          <Badge
+                            variant="outline"
+                            className="text-xs bg-indigo-100 text-indigo-700 border-indigo-300"
+                          >
+                            Explained
+                          </Badge>
+                        )}
+                        {isEmpty && !hasExplanation && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => dismissSession(s.id)}
+                            className="h-6 px-2 text-xs"
+                          >
+                            Dismiss
+                          </Button>
                         )}
                       </div>
                     </div>
-                  ))}
+
+                    {/* Entries */}
+                    {s.entries.map((e) => (
+                      <p key={e.id} className="whitespace-pre-wrap">
+                        <span className="text-xs text-muted-foreground tabular-nums">
+                          {fmtTime(e.logged_at)} · {e.minutes}m ·{" "}
+                        </span>
+                        {e.description}
+                      </p>
+                    ))}
+
+                    {/* Explanation */}
+                    {hasExplanation && s.member_explanation && (
+                      <div className="rounded-md border bg-white p-2 space-y-1">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Member explanation
+                        </p>
+                        <p className="whitespace-pre-wrap text-sm">
+                          {s.member_explanation}
+                        </p>
+                        {s.declared_minutes != null && (
+                          <p className="text-xs text-muted-foreground">
+                            Declared: {Math.floor(s.declared_minutes / 60)}h{" "}
+                            {s.declared_minutes % 60}m
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Summary line */}
+                    {!isEmpty && (
+                      <p className="text-xs text-muted-foreground">
+                        {s.entries.length} entr
+                        {s.entries.length === 1 ? "y" : "ies"} ·{" "}
+                        {Math.floor(totalMinutes / 60)}h {totalMinutes % 60}m
+                        logged
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Time logs for this participant */}
+              {pLogs.map((log) => (
+                <div
+                  key={log.id}
+                  className="flex items-start justify-between gap-3 rounded-md border p-3 text-sm"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium tabular-nums">
+                      {log.work_date} · {Number(log.hours).toFixed(2)}h
+                    </p>
+                    {log.notes && (
+                      <p className="text-xs text-muted-foreground">
+                        {log.notes}
+                      </p>
+                    )}
+                    {log.review_note && (
+                      <p className="mt-1 text-xs text-amber-700">
+                        Note: {log.review_note}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge
+                      variant="outline"
+                      className={`text-xs ${REVIEW_STATUS_CLASS[log.review_status]}`}
+                    >
+                      {REVIEW_STATUS_LABEL[log.review_status]}
+                    </Badge>
+                    {log.review_status === "pending" && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy === log.id}
+                          onClick={() => review(log.id, "approve")}
+                          title="Approve"
+                        >
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy === log.id}
+                          onClick={() => setFlaggingId(log.id)}
+                          title="Flag for review"
+                        >
+                          <Flag className="h-4 w-4 text-amber-600" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy === log.id}
+                          onClick={() => setRejectingId(log.id)}
+                          title="Reject"
+                        >
+                          <XCircle className="h-4 w-4 text-red-600" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </div>
-              )}
+              ))}
 
               {/* Inline flag/reject forms */}
               {pLogs.map((log) => {
@@ -320,7 +412,9 @@ export function AdminDailyReview({ pieId }: Props) {
                     className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3"
                   >
                     <p className="text-sm font-medium">
-                      {isReject ? "Reject this log?" : "Flag this log for follow-up"}
+                      {isReject
+                        ? "Reject this log?"
+                        : "Flag this log for follow-up"}
                     </p>
                     <Textarea
                       value={isReject ? rejectNote : flagNote}
