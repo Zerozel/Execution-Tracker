@@ -2,15 +2,16 @@
 // Execution Tracker — My Time (Member Self-Service)
 // ============================================================
 // The member's home for logging hours. Finds every Pie the current
-// user participates in and renders an offline-capable time-log panel
-// for each. Available to ALL authenticated users (not just admins) —
-// this is the day-to-day contributor action.
+// user participates in and renders a work-session panel plus a
+// history of their own logs with review status. Available to ALL
+// authenticated users (not just admins).
 // ============================================================
 
 import { requireAuth } from "@/lib/auth";
 import { createClient } from "@/lib/supabase";
 import { resolvePieConfig } from "@/lib/slicing-pie/server/context";
-import { TimeLogPanel } from "@/components/time-log-panel";
+import { WorkSessionPanel } from "@/components/work-session-panel";
+import { MemberLogHistory } from "@/components/member-log-history";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock } from "lucide-react";
@@ -50,7 +51,6 @@ export default async function MyTimePage() {
     );
   }
 
-  // Load the Pies (name, currency, status, tags) in one query.
   const pieIds = Array.from(new Set(participants.map((p) => p.pie_id)));
   const { data: piesData } = await supabase
     .from("pies")
@@ -58,7 +58,6 @@ export default async function MyTimePage() {
     .in("id", pieIds);
   const pies = (piesData ?? []) as Pie[];
 
-  // Resolve project tags per Pie (from settings) for the dropdown.
   const pieConfigs = await Promise.all(
     pies.map(async (pie) => {
       const { settings } = await resolvePieConfig(pie.id);
@@ -74,8 +73,10 @@ export default async function MyTimePage() {
           My Time
         </h1>
         <p className="mt-1 text-muted-foreground">
-          Log the hours you work — they convert to equity slices at each
-          payday. Works offline; entries sync automatically when you reconnect.
+          Start a session when you begin working. Log what you did every
+          hour. The session ends automatically two hours after your last
+          check-in. Every session goes to the admin for review before it
+          becomes equity slices at payday.
         </p>
       </div>
 
@@ -96,11 +97,12 @@ export default async function MyTimePage() {
                 </Badge>
               )}
             </div>
-            <TimeLogPanel
+            <WorkSessionPanel
               pieId={pie.id}
               projectTags={projectTags}
               frozen={pie.status === "frozen"}
             />
+            <MemberLogHistory pieId={pie.id} />
           </section>
         );
       })}

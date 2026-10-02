@@ -26,6 +26,8 @@ import { PieWellPanel } from "@/components/pie-well-panel";
 import { PaydayPanel } from "@/components/payday-panel";
 import { ParticipantSalaryEditor } from "@/components/participant-salary-editor";
 import { PendingReferralsPanel } from "@/components/pending-referrals-panel";
+import { AdminWorkingNow } from "@/components/admin-working-now";
+import { AdminDailyReview } from "@/components/admin-daily-review";
 import {
   PieDeparturePanel,
   type DepartureCandidate,
@@ -72,9 +74,6 @@ export default async function PieDashboardPage({ params }: PageProps) {
   const contributions = (contributionsData ?? []) as Contribution[];
   const well = (wellData ?? null) as Well | null;
 
-  // The Well's ownership breakdown — who owns the balance, and in what
-  // proportion. This is what the next withdrawal will be split by
-  // (WELL-001), so it belongs on screen next to the balance.
   const { data: wellTxData } = well
     ? await supabase
         .from("well_transactions")
@@ -87,9 +86,6 @@ export default async function PieDashboardPage({ params }: PageProps) {
 
   const { settings } = await resolvePieConfig(id);
 
-  // Resolve each participant's current effective fair-market salary
-  // (latest terms version with effective_from <= today), for the
-  // salary editor + payday readiness.
   const today = new Date().toISOString().split("T")[0];
   const participantIds = participants.map((p) => p.id);
   const termsByParticipant = new Map<string, number | null>();
@@ -101,7 +97,9 @@ export default async function PieDashboardPage({ params }: PageProps) {
     const terms = (termsData ?? []) as ParticipantTermsVersion[];
     for (const pid of participantIds) {
       const effective = terms
-        .filter((t) => t.participant_id === pid && (t.effective_from || "") <= today)
+        .filter(
+          (t) => t.participant_id === pid && (t.effective_from || "") <= today
+        )
         .sort((a, b) =>
           (b.effective_from || "").localeCompare(a.effective_from || "")
         )[0];
@@ -129,16 +127,10 @@ export default async function PieDashboardPage({ params }: PageProps) {
     frozen: "secondary",
   };
 
-  // Only active participants can receive new contributions.
   const activeParticipants = participants.filter(
     (p) => p.status === "active" || p.status === "candidate"
   );
 
-  // Who can leave, and under what rules. The §20 guards are evaluated
-  // HERE, on the server, with the same functions the departures route
-  // calls — so the screen cannot offer a departure the API would then
-  // refuse, and someone it hides comes with the rule's own reason
-  // rather than a blank.
   const capRowById = new Map(capTable.rows.map((r) => [r.participant_id, r]));
   const departureCandidates: DepartureCandidate[] = participants.map((p) => {
     const row = capRowById.get(p.id);
@@ -207,6 +199,12 @@ export default async function PieDashboardPage({ params }: PageProps) {
         />
       </section>
 
+      {/* Working now — live session dashboard */}
+      <AdminWorkingNow pieId={id} />
+
+      {/* Today's work — review queue */}
+      <AdminDailyReview pieId={id} />
+
       {/* Payday — convert logged hours into slices */}
       {pie.status !== "frozen" && (
         <section className="space-y-3">
@@ -244,8 +242,7 @@ export default async function PieDashboardPage({ params }: PageProps) {
         />
       </section>
 
-      {/* Referrals waiting out the CONFIG-016 period. Self-hiding: a
-          Pie with no referrals sees nothing here. */}
+      {/* Referrals waiting out the CONFIG-016 period. Self-hiding. */}
       <PendingReferralsPanel
         pieId={id}
         currency={pie.currency}

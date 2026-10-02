@@ -10,6 +10,12 @@
 //   runPayday()      → commits: inserts contributions, marks logs
 //                       converted, and records a payday_runs audit row.
 //
+// ONLY LOGS THE ADMIN HAS APPROVED CONVERT. A log in review_status
+// 'pending' or 'flagged' is skipped; a log in 'void' is skipped. This
+// is the accounting rule that makes the admin review meaningful — the
+// member declares, the admin verifies, only then does the slice
+// ledger move.
+//
 // Logs whose participant has no fair-market salary effective on the
 // work date are SKIPPED (left pending) and surfaced to the admin.
 // ============================================================
@@ -58,7 +64,18 @@ class Resolver {
   }
 }
 
-/** Fetch pending logs for a Pie, optionally bounded by work_date. */
+/**
+ * Fetch logs eligible for conversion:
+ *   • status = 'pending'            → not yet converted by a prior payday
+ *   • review_status = 'approved'    → the admin has verified them
+ *
+ * Logs that are pending or flagged at the review layer are NOT
+ * returned — the member declared, but the admin has not yet confirmed.
+ * Flagged logs stay out until the admin resolves them.
+ *
+ * Voided logs are excluded by both filters (their status remains
+ * 'pending' until payday runs, but review_status = 'void' blocks them).
+ */
 async function fetchPendingLogs(
   pieId: string,
   periodStart?: string,
@@ -70,6 +87,7 @@ async function fetchPendingLogs(
     .select("*")
     .eq("pie_id", pieId)
     .eq("status", "pending")
+    .eq("review_status", "approved")
     .order("work_date", { ascending: true });
 
   if (periodStart) query = query.gte("work_date", periodStart);
@@ -254,7 +272,11 @@ export async function runPayday(
         participant_id: log.participant_id,
         type: "time",
         event_date: log.work_date,
-        inputs: { hours: Number(log.hours), source: "time_log", time_log_id: log.id },
+        inputs: {
+          hours: Number(log.hours),
+          source: "time_log",
+          time_log_id: log.id,
+        },
         config_snapshot: settings,
         fmv_minor: computation.fmv_minor,
         multiplier_kind: computation.multiplier_kind,
