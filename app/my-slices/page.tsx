@@ -11,7 +11,7 @@
 // so a member cannot reach another member's figures by editing a URL.
 // ============================================================
 
-import { requireAuth } from "@/lib/auth";
+import { requireAuthWithTerms } from "@/lib/auth";
 import { createClient } from "@/lib/supabase";
 import { loadMySlices } from "@/lib/slicing-pie/server/my-slices";
 import { formatMoney, formatPercent, formatSlices } from "@/lib/slicing-pie/format";
@@ -31,7 +31,7 @@ const STATUS_WORDS: Record<string, string> = {
 };
 
 export default async function MySlicesPage() {
-  const user = await requireAuth();
+  const user = await requireAuthWithTerms();
   const supabase = await createClient();
 
   // Which Pies is this user a participant in? (Same lookup as My Time —

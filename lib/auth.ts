@@ -4,10 +4,18 @@
 // NOTE: This file replaces the Session 2 lib/auth.ts.
 // The getCurrentUser(), requireAuth(), and requireAdmin()
 // functions remain identical. Only additions are below.
+//
+// Additions (terms feature):
+//   • requireAuthWithTerms()   — requireAuth + terms check
+//   • requireAdminWithTerms()  — requireAdmin + terms check
+//
+// The /terms page itself calls requireAuth() (not the *WithTerms
+// variants) so it stays reachable for users who have not accepted.
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase";
+import { getTermsStatus } from "@/lib/terms";
 import type { AuthUser } from "@/types";
 
 // ============================================================
@@ -101,6 +109,39 @@ export async function requireAdmin(): Promise<AuthUser> {
 
   if (user.role !== "admin") {
     redirect("/dashboard");
+  }
+
+  return user;
+}
+
+// ============================================================
+// TERMS-AWARE VARIANTS
+// ============================================================
+// These wrap requireAuth and requireAdmin with a check that the
+// user has accepted the current terms version. If they have not,
+// they are redirected to /terms.
+//
+// Every authenticated page uses one of these. The /terms page
+// itself uses requireAuth() so a user who has not accepted can
+// still reach the page to accept.
+
+export async function requireAuthWithTerms(): Promise<AuthUser> {
+  const user = await requireAuth();
+
+  const status = await getTermsStatus(user.id);
+  if (!status.accepted) {
+    redirect("/terms");
+  }
+
+  return user;
+}
+
+export async function requireAdminWithTerms(): Promise<AuthUser> {
+  const user = await requireAdmin();
+
+  const status = await getTermsStatus(user.id);
+  if (!status.accepted) {
+    redirect("/terms");
   }
 
   return user;

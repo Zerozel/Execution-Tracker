@@ -7,7 +7,7 @@
 // authenticated users (not just admins).
 // ============================================================
 
-import { requireAuth } from "@/lib/auth";
+import { requireAuthWithTerms } from "@/lib/auth";
 import { createClient } from "@/lib/supabase";
 import { resolvePieConfig } from "@/lib/slicing-pie/server/context";
 import { WorkSessionPanel } from "@/components/work-session-panel";
@@ -18,10 +18,9 @@ import { Clock } from "lucide-react";
 import type { Pie, PieParticipant } from "@/types/slicing-pie";
 
 export default async function MyTimePage() {
-  const user = await requireAuth();
+  const user = await requireAuthWithTerms();
   const supabase = await createClient();
 
-  // Which Pies is this user a participant in?
   const { data: participantRows } = await supabase
     .from("pie_participants")
     .select("id, pie_id, display_name, pie_role, status")
@@ -73,10 +72,10 @@ export default async function MyTimePage() {
           My Time
         </h1>
         <p className="mt-1 text-muted-foreground">
-          Start a session when you begin working. Log what you did every
-          hour. The session ends automatically two hours after your last
-          check-in. Every session goes to the admin for review before it
-          becomes equity slices at payday.
+          Start a session when you begin working. Log what you did every hour.
+          The session ends automatically two hours after your last check-in.
+          Every session goes to the admin for review before it becomes equity
+          slices at payday.
         </p>
       </div>
 

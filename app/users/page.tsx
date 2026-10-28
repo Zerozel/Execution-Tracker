@@ -2,7 +2,7 @@
 // Execution Tracker — User Management Page (With Daily Plans)
 // ============================================================
 
-import { requireAdmin } from "@/lib/auth";
+import { requireAdminWithTerms } from "@/lib/auth";
 import { createClient } from "@/lib/supabase";
 import { UserList } from "@/components/user-list";
 import { UserCreateForm } from "@/components/user-create-form";
@@ -13,7 +13,7 @@ import { Users } from "lucide-react";
 import type { User } from "@/types";
 
 export default async function UsersPage() {
-  await requireAdmin();
+  await requireAdminWithTerms();
 
   const supabase = await createClient();
   const { data: users } = await supabase

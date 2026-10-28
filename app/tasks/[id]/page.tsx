@@ -4,7 +4,7 @@
 
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase";
-import { getCurrentUser } from "@/lib/auth";
+import { requireAuthWithTerms } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AcceptTaskButton } from "@/components/accept-task-button";
@@ -22,11 +22,7 @@ interface TaskDetailPageProps {
 }
 
 export default async function TaskDetailPage({ params }: TaskDetailPageProps) {
-  const user = await getCurrentUser();
-
-  if (!user) {
-    notFound();
-  }
+  const user = await requireAuthWithTerms();
 
   const { id } = await params;
   const supabase = await createClient();

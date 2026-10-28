@@ -10,7 +10,7 @@
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdminWithTerms } from "@/lib/auth";
 import { createClient } from "@/lib/supabase";
 import { resolvePieConfig } from "@/lib/slicing-pie/server/context";
 import { buildCapTable } from "@/lib/slicing-pie/engine/captable";
@@ -49,7 +49,7 @@ interface PageProps {
 }
 
 export default async function PieDashboardPage({ params }: PageProps) {
-  await requireAdmin();
+  await requireAdminWithTerms();
   const { id } = await params;
 
   const supabase = await createClient();

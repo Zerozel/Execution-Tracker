@@ -2,7 +2,7 @@
 // Execution Tracker — Founder Accountability Dashboard
 // ============================================================
 
-import { requireAuth } from "@/lib/auth";
+import { requireAuthWithTerms } from "@/lib/auth";
 import { createClient } from "@/lib/supabase";
 import { DashboardStats } from "@/components/dashboard-stats";
 import { TaskList } from "@/components/task-list";
@@ -12,7 +12,7 @@ import { ClientTaskCreateWrapper } from "./client-wrapper";
 import { ClipboardList, Send, CheckCircle2, Trophy } from "lucide-react";
 
 export default async function DashboardPage() {
-  const user = await requireAuth();
+  const user = await requireAuthWithTerms();
   const supabase = await createClient();
 
   const { data: acceptedTasks } = await supabase
