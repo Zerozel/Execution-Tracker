@@ -2,9 +2,14 @@
 // Execution Tracker — GET & POST /api/pies/[id]/participants
 // ============================================================
 // GET  → all participants in a Pie (any authenticated user).
-// POST → add a participant (admin only). Optionally seeds an initial
-//        terms version (FMV salary / contractor rate / hours override)
-//        used by the time & contractor calculators.
+// POST → add a participant (admin only). Idempotent: if a
+//        participant with the same (pie_id, user_id) already
+//        exists, returns that row instead of inserting a new one.
+//        Network retries and double-clicks are safe.
+//
+// Optionally seeds an initial terms version (FMV salary /
+// contractor rate / hours override) used by the time and
+// contractor calculators.
 // ============================================================
 
 import { createClient } from "@/lib/supabase";
@@ -102,6 +107,52 @@ export async function POST(request: Request, context: RouteContext) {
     }
 
     const supabase = await createClient();
+
+    // IDEMPOTENCY: if a participant with this user_id already exists
+    // in this Pie, return it with a 200. The unique index on
+    // (pie_id, user_id) enforces this at the database level too —
+    // this check produces a friendly response instead of a 500 on
+    // duplicate insert.
+    if (user_id && typeof user_id === "string") {
+      const { data: existing } = await supabase
+        .from("pie_participants")
+        .select("*")
+        .eq("pie_id", id)
+        .eq("user_id", user_id)
+        .maybeSingle();
+
+      if (existing) {
+        // Seed terms only if they were supplied and none exist yet.
+        // Do NOT overwrite existing terms.
+        const { data: existingTerms } = await supabase
+          .from("participant_terms_versions")
+          .select("id")
+          .eq("participant_id", existing.id)
+          .limit(1)
+          .maybeSingle();
+
+        const hasNewTerms =
+          fair_market_salary_minor != null ||
+          contractor_rate_minor != null ||
+          working_hours_override != null;
+
+        if (hasNewTerms && !existingTerms) {
+          await supabase.from("participant_terms_versions").insert({
+            participant_id: existing.id,
+            fair_market_salary_minor:
+              (fair_market_salary_minor as number) ?? null,
+            contractor_rate_minor: (contractor_rate_minor as number) ?? null,
+            working_hours_override: (working_hours_override as number) ?? null,
+            note: "Initial terms (from retry)",
+            created_by: user.id,
+          });
+        }
+
+        return ok(existing, 200);
+      }
+    }
+
+    // Normal path: insert a new participant.
     const { data: participant, error } = await supabase
       .from("pie_participants")
       .insert({

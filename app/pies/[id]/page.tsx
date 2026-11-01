@@ -100,9 +100,16 @@ export default async function PieDashboardPage({ params }: PageProps) {
         .filter(
           (t) => t.participant_id === pid && (t.effective_from || "") <= today
         )
-        .sort((a, b) =>
-          (b.effective_from || "").localeCompare(a.effective_from || "")
-        )[0];
+        .sort((a, b) => {
+          // Primary: newest effective_from wins
+          const byDate = (b.effective_from || "").localeCompare(
+            a.effective_from || ""
+          );
+          if (byDate !== 0) return byDate;
+          // Secondary: newest created_at wins when two versions share
+          // the same effective_from (same-day edits now take effect)
+          return (b.created_at || "").localeCompare(a.created_at || "");
+        })[0];
       termsByParticipant.set(
         pid,
         effective?.fair_market_salary_minor ?? null
