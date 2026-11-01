@@ -9,6 +9,18 @@
 // caller's participant row BY user_id and scopes every other query to
 // it. There is no parameter anywhere in this path that widens the scope,
 // so a member cannot reach another member's figures by editing a URL.
+//
+// Open items carried as TODO(confirm) below:
+//   1. Source of the Pie's non-cash multiplier (CONFIG-001). The spec
+//      says it is a Pie-level setting; this page reads it from
+//      `compensation.non_cash_multiplier`, which my-slices.ts must
+//      populate from resolvePieConfig(). If that derivation is wrong,
+//      the "what one hour earns" figure is wrong by the same factor.
+//   2. "Still at risk" is derived from planDrawdown(0, …), which the
+//      implementation plan (§8) identifies as the top open correctness
+//      risk for ledgers containing cash_payment_to_participant rows
+//      (HARD-VAL-004). A disclaimer is shown; the authoritative figure
+//      is computed at departure.
 // ============================================================
 
 import { requireAuthWithTerms } from "@/lib/auth";
@@ -99,13 +111,20 @@ export default async function MySlicesPage() {
         const hasSlices = d.ownership.slices !== 0;
         const comp = d.compensation;
 
-        // One hour of approved work earns: hourly × non-cash multiplier.
-        // TODO(confirm): assumes the engine computes slices as
-        // fmv_minor × multiplier (no /100). If the engine divides minor
-        // units by 100 first, restore the / 100 here and in the panel.
+        // One hour of approved work earns: (hourly rate in major units)
+        // × the Slicing Pie non-cash time multiplier.
+        //
+        // Spec TIME-003: Slices Per Hour = Hourly Rate × Non-Cash Multiplier.
+        // Spec TIME-001: Hourly Rate = Annual FMV Salary ÷ Working Hours,
+        //   denominated in major currency units.
+        // Spec CORE-002: Slices = Fair Market Value × Multiplier; a slice
+        //   is dimensionless (Ch.3) — 1 slice is not 1 kobo.
+        //
+        // hourly_minor is in minor units, so divide by 100 before applying
+        // the multiplier. ₦8,400/hr × 2 = 16,800 slices (not 1,680,000).
         const oneHourSlices =
           comp?.hourly_minor != null && comp.non_cash_multiplier > 0
-            ? comp.hourly_minor * comp.non_cash_multiplier
+            ? (comp.hourly_minor / 100) * comp.non_cash_multiplier
             : null;
 
         return (
@@ -242,7 +261,7 @@ export default async function MySlicesPage() {
                         </span>
                       </div>
 
-                      {/* Effective date */}
+                      {/* Effective date + historical-rate caveat (EDGE-024) */}
                       {comp.effective_from && (
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-muted-foreground">
@@ -253,6 +272,12 @@ export default async function MySlicesPage() {
                           </span>
                         </div>
                       )}
+                      <p className="text-xs text-muted-foreground">
+                        These are your <em>current</em> terms. A rate change
+                        never rewrites past entries — slices you earned before
+                        the date above were calculated at the rate then in
+                        force, and are unaffected by this update.
+                      </p>
 
                       {/* Calculation */}
                       <div className="rounded-md bg-muted/40 p-3 space-y-1.5 text-xs text-muted-foreground">
@@ -303,8 +328,8 @@ export default async function MySlicesPage() {
                           </p>
                           <p className="text-emerald-800 mt-1">
                             {formatMoney(comp.hourly_minor!, currency)} ×{" "}
-                            {comp.non_cash_multiplier}× (Slicing Pie time
-                            multiplier) ={" "}
+                            {comp.non_cash_multiplier}× (Pie&apos;s non-cash
+                            multiplier, CONFIG-001) ={" "}
                             <span className="font-semibold tabular-nums">
                               {formatSlices(oneHourSlices, sdp)} slices
                             </span>
@@ -378,7 +403,9 @@ export default async function MySlicesPage() {
                     Slices are not the same as money. Each contribution is
                     multiplied by the Pie&apos;s factor for its type before it
                     becomes slices, and a slice&apos;s cash value only exists
-                    when the business is sold or pays out.
+                    when the business is sold or pays out. Whether new royalty
+                    or rent entries still accrue after you leave depends on
+                    the Pie&apos;s departure policy.
                   </p>
                 </CardContent>
               </Card>
@@ -419,6 +446,13 @@ export default async function MySlicesPage() {
                     This is what the Pie still owes you for. Anything you have
                     already been paid comes off automatically — you are never
                     credited twice for the same money.
+                  </p>
+                  {/* Plan §8: recovery-vs-payment is the top open correctness
+                      item. The figure above is informational; departure
+                      recalculates it against the full ledger. */}
+                  <p className="pt-1 text-xs text-muted-foreground">
+                    This figure is for information. When you leave, your final
+                    recovery is recalculated against the full ledger.
                   </p>
                   <details className="pt-1">
                     <summary className="cursor-pointer text-xs text-muted-foreground">
