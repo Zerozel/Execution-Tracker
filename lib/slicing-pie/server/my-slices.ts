@@ -42,6 +42,9 @@ const RECENT_LIMIT = 25;
 /** Default working hours per year for deriving the hourly rate. */
 const DEFAULT_WORKING_HOURS = 2000;
 
+/** Defensive floor for CONFIG-001 if settings ever come back malformed. */
+const FALLBACK_NON_CASH_MULTIPLIER = 2;
+
 export interface MySlicesPayload {
   pie: {
     id: string;
@@ -80,7 +83,7 @@ export interface MySlicesPayload {
     working_hours_override: number | null;
     effective_working_hours: number;
     effective_from: string | null;
-    /** Multiplier the Slicing Pie engine applies to time contributions. */
+    /** CONFIG-001: the Pie's configured non-cash multiplier. */
     non_cash_multiplier: number;
   } | null;
   by_category: { category: string; slices: number }[];
@@ -194,7 +197,9 @@ export async function loadMySlices(
   const terms = (termsData ?? []) as ParticipantTermsVersion[];
   const effectiveTerms =
     terms
-      .filter((t) => (t.effective_from || "") <= today)
+      .filter(
+        (t) => t.effective_from != null && t.effective_from <= today
+      )
       .sort((a, b) => {
         const byDate = (b.effective_from || "").localeCompare(
           a.effective_from || ""
@@ -214,8 +219,7 @@ export async function loadMySlices(
         : DEFAULT_WORKING_HOURS;
 
     // Monthly rate = annual / 12. Integer arithmetic on minor units.
-    const monthly =
-      annual != null ? Math.round(annual / 12) : null;
+    const monthly = annual != null ? Math.round(annual / 12) : null;
 
     // Hourly rate: prefer the contractor rate if explicitly set;
     // otherwise derive from annual / working hours.
@@ -226,16 +230,15 @@ export async function loadMySlices(
       hourly = Math.round(annual / effectiveHours);
     }
 
-    // Pull the multiplier the engine applies to time, so the page shows
-    // the same number the ledger uses. If settings do not expose it,
-    // fall back to the standard 2× from the Slicing Pie model.
-    const rawMultiplier =
-      (settings as { multipliers?: { non_cash?: number } }).multipliers
-        ?.non_cash;
+    // CONFIG-001: the non-cash multiplier is a flat field on PieSettings
+    // (see config/schema.ts:56 and engine/calculate.ts:232 — both read
+    // `settings.non_cash_multiplier` directly; there is no `multipliers`
+    // sub-object). Reading it here keeps the page's "what one hour
+    // earns" figure in agreement with the engine at payday.
     const nonCashMultiplier =
-      typeof rawMultiplier === "number" && rawMultiplier > 0
-        ? rawMultiplier
-        : 2;
+      settings.non_cash_multiplier > 0
+        ? settings.non_cash_multiplier
+        : FALLBACK_NON_CASH_MULTIPLIER;
 
     compensation = {
       annual_minor: annual ?? null,
@@ -254,6 +257,11 @@ export async function loadMySlices(
   // reused with a zero payment rather than re-implemented — the split
   // into buckets, and the replay of every payment already made, then
   // come out identical to the payment path's own view.
+  //
+  // Note (plan §8): row-by-row drawdown is known to be incorrect for
+  // ledgers containing cash_payment_to_participant rows. The aggregate
+  // rework is the W2 fix; until then the page shows this figure with a
+  // disclaimer.
   const atRisk = planDrawdown(0, myRows, settings);
 
   // Hours logged but not yet converted, from the same rows the member
