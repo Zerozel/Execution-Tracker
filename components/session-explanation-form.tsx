@@ -5,6 +5,10 @@
 // duration and its logged entries. The member describes what they
 // did, why they didn't log, and how long they actually worked.
 // The declaration goes into the admin review queue.
+//
+// Defensive guard: if the session ran for less than 1 minute, the
+// form cannot be satisfied (declared minutes must be >= 1 and
+// <= elapsed minutes). Render a placeholder instead of a broken form.
 // ============================================================
 
 "use client";
@@ -14,7 +18,6 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, Send } from "lucide-react";
 
 interface UnexplainedSession {
@@ -61,6 +64,37 @@ export function SessionExplanationForm({ pieId, session }: Props) {
   const elapsedMs =
     new Date(session.ended_at).getTime() - new Date(session.started_at).getTime();
   const elapsedMinutes = Math.max(0, Math.floor(elapsedMs / 60000));
+
+  // ------------------------------------------------------------
+  // Defensive guard: a session under 1 minute cannot be explained.
+  // The minimum declared time is 1 minute, and it cannot exceed the
+  // session's elapsed minutes. If elapsed is 0, the form is impossible.
+  // ------------------------------------------------------------
+  if (elapsedMinutes < 1) {
+    return (
+      <Card className="border-gray-200 bg-gray-50/50">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2 text-gray-700">
+            <AlertTriangle className="h-4 w-4" />
+            A session was too short to explain
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <p className="text-sm text-gray-700">
+            A session started at {fmtDateTime(session.started_at)} and ended
+            less than a minute later. There is nothing to explain — it did
+            not count, and it does not need to.
+          </p>
+          <p className="text-xs text-gray-600">
+            If this was a mistake, no action is needed. If you actually worked
+            during this period, the work is lost and cannot be recovered.
+            Start a new session the next time you begin working.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const maxHours = Math.floor(elapsedMinutes / 60);
   const maxMinutes = elapsedMinutes % 60;
 
@@ -127,7 +161,6 @@ export function SessionExplanationForm({ pieId, session }: Props) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Session summary */}
         <div className="rounded-md border bg-white p-3 text-sm space-y-1">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Started</span>
@@ -139,14 +172,6 @@ export function SessionExplanationForm({ pieId, session }: Props) {
             <span className="text-muted-foreground">Ended</span>
             <span className="tabular-nums">
               {fmtDateTime(session.ended_at)}
-              {session.end_reason === "timeout" && (
-                <Badge
-                  variant="outline"
-                  className="ml-2 text-xs bg-amber-100 text-amber-700 border-amber-300"
-                >
-                  Timed out
-                </Badge>
-              )}
             </span>
           </div>
           <div className="flex justify-between">
@@ -175,7 +200,6 @@ export function SessionExplanationForm({ pieId, session }: Props) {
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* What did you do */}
           <div className="space-y-2">
             <label className="text-sm font-medium">
               What did you work on? *
@@ -194,7 +218,6 @@ export function SessionExplanationForm({ pieId, session }: Props) {
             />
           </div>
 
-          {/* Why no entry */}
           <div className="space-y-2">
             <label className="text-sm font-medium">
               Why didn&apos;t you log an entry? *
@@ -213,7 +236,6 @@ export function SessionExplanationForm({ pieId, session }: Props) {
             />
           </div>
 
-          {/* Declared duration */}
           <div className="space-y-2">
             <label className="text-sm font-medium">
               How long did you actually work? *

@@ -101,13 +101,10 @@ export default async function PieDashboardPage({ params }: PageProps) {
           (t) => t.participant_id === pid && (t.effective_from || "") <= today
         )
         .sort((a, b) => {
-          // Primary: newest effective_from wins
           const byDate = (b.effective_from || "").localeCompare(
             a.effective_from || ""
           );
           if (byDate !== 0) return byDate;
-          // Secondary: newest created_at wins when two versions share
-          // the same effective_from (same-day edits now take effect)
           return (b.created_at || "").localeCompare(a.created_at || "");
         })[0];
       termsByParticipant.set(
@@ -309,7 +306,7 @@ export default async function PieDashboardPage({ params }: PageProps) {
             </Card>
           ))}
         </div>
-        <PieParticipantForm pieId={id} />
+        <PieParticipantForm pieId={id} currency={pie.currency} />
       </section>
 
       {/* Departures — recover slices when someone leaves */}

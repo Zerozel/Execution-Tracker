@@ -9,9 +9,13 @@
 //   • External — someone not on the platform (advisor, contractor).
 //     No user_id is sent, and the participant exists only inside
 //     this Pie.
-// Optionally seeds initial terms (FMV salary / contractor rate) that
-// the time & contractor calculators consume. Amounts are entered in
-// major units and converted to minor units before submit.
+//
+// Terms: the admin enters the ANNUAL fair-market salary. The hourly
+// rate is derived automatically (annual / working_hours_per_year,
+// default 2000). An optional working-hours override lets the admin
+// set a different divisor for contractors or part-time roles. An
+// optional contractor_rate_minor field lets the admin override the
+// derived hourly rate for contractors on a negotiated rate.
 // ============================================================
 
 "use client";
@@ -21,7 +25,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { toMinor } from "@/lib/slicing-pie/format";
+import { formatMoney, toMinor } from "@/lib/slicing-pie/format";
 import { UserPlus } from "lucide-react";
 import type { PieRole } from "@/types/slicing-pie";
 
@@ -34,8 +38,11 @@ const ROLES: PieRole[] = [
   "investor",
 ];
 
+const DEFAULT_WORKING_HOURS = 2000;
+
 interface Props {
   pieId: string;
+  currency: string;
 }
 
 interface TeamMember {
@@ -45,7 +52,7 @@ interface TeamMember {
   role: string;
 }
 
-export function PieParticipantForm({ pieId }: Props) {
+export function PieParticipantForm({ pieId, currency }: Props) {
   const router = useRouter();
 
   // Mode: "team" uses an existing public.users row; "external" is free text.
@@ -59,8 +66,10 @@ export function PieParticipantForm({ pieId }: Props) {
   // Form fields
   const [displayName, setDisplayName] = useState("");
   const [role, setRole] = useState<PieRole>("employee");
-  const [salary, setSalary] = useState("");
+  const [annualSalary, setAnnualSalary] = useState("");
   const [contractorRate, setContractorRate] = useState("");
+  const [hoursOverride, setHoursOverride] = useState("");
+  const [showHoursOverride, setShowHoursOverride] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -104,6 +113,29 @@ export function PieParticipantForm({ pieId }: Props) {
     }
   }
 
+  // Derived hourly rate from annual salary and working hours.
+  function computedHourly(): number | null {
+    const annual = Number(annualSalary);
+    if (!Number.isFinite(annual) || annual <= 0) return null;
+
+    const hours = showHoursOverride
+      ? Number(hoursOverride) || DEFAULT_WORKING_HOURS
+      : DEFAULT_WORKING_HOURS;
+
+    if (!Number.isFinite(hours) || hours <= 0) return null;
+    return annual / hours;
+  }
+
+  // If the admin has typed a contractor rate, use it. Otherwise use
+  // the derived hourly. This is what gets stored as contractor_rate.
+  function effectiveContractorRate(): number | null {
+    const rate = Number(contractorRate);
+    if (contractorRate.trim() && Number.isFinite(rate) && rate > 0) {
+      return rate;
+    }
+    return computedHourly();
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -127,11 +159,27 @@ export function PieParticipantForm({ pieId }: Props) {
       if (mode === "team") {
         payload.user_id = selectedUserId;
       }
-      if (salary.trim() && !Number.isNaN(Number(salary))) {
-        payload.fair_market_salary_minor = toMinor(Number(salary));
+
+      const annualMajor = Number(annualSalary);
+      if (annualSalary.trim() && Number.isFinite(annualMajor) && annualMajor > 0) {
+        payload.fair_market_salary_minor = toMinor(annualMajor);
       }
-      if (contractorRate.trim() && !Number.isNaN(Number(contractorRate))) {
-        payload.contractor_rate_minor = toMinor(Number(contractorRate));
+
+      // Store contractor rate: explicit entry wins, else derived.
+      const rate = effectiveContractorRate();
+      if (rate != null) {
+        payload.contractor_rate_minor = toMinor(rate);
+      }
+
+      // Working-hours override, only when the admin actually set it.
+      const hours = Number(hoursOverride);
+      if (
+        showHoursOverride &&
+        Number.isFinite(hours) &&
+        hours > 0 &&
+        hours !== DEFAULT_WORKING_HOURS
+      ) {
+        payload.working_hours_override = hours;
       }
 
       const response = await fetch(`/api/pies/${pieId}/participants`, {
@@ -149,8 +197,10 @@ export function PieParticipantForm({ pieId }: Props) {
       // Reset form
       setDisplayName("");
       setSelectedUserId("");
-      setSalary("");
+      setAnnualSalary("");
       setContractorRate("");
+      setHoursOverride("");
+      setShowHoursOverride(false);
       setRole("employee");
       setIsLoading(false);
       router.refresh();
@@ -160,10 +210,8 @@ export function PieParticipantForm({ pieId }: Props) {
     }
   }
 
-  // A user who is already a participant in this Pie should not appear
-  // in the "add" dropdown. The parent page passes the current list.
-  // (Kept simple here: we still show all — the API allows duplicates
-  // and the admin can delete one if it was a mistake. See note below.)
+  const hourly = computedHourly();
+  const rate = effectiveContractorRate();
 
   return (
     <Card>
@@ -288,42 +336,102 @@ export function PieParticipantForm({ pieId }: Props) {
             </div>
           </div>
 
-          {/* Terms */}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <label htmlFor="p-salary" className="text-sm font-medium">
-                Fair-Market Salary (annual)
-              </label>
-              <Input
-                id="p-salary"
-                type="number"
-                min="0"
-                step="0.01"
-                value={salary}
-                onChange={(e) => setSalary(e.target.value)}
-                placeholder="e.g., 120000"
-                disabled={isLoading}
-              />
-              <p className="text-xs text-muted-foreground">
-                Used to value logged time (§4.1).
-              </p>
+          {/* Terms: annual FMV + derived hourly + contractor override */}
+          <div className="rounded-md border bg-muted/30 p-3 space-y-3">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label htmlFor="p-salary" className="text-sm font-medium">
+                  Annual Fair-Market Salary
+                </label>
+                <Input
+                  id="p-salary"
+                  type="number"
+                  min="0"
+                  step="1000"
+                  value={annualSalary}
+                  onChange={(e) => setAnnualSalary(e.target.value)}
+                  placeholder="e.g. 8400000"
+                  disabled={isLoading}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Used to value logged time (§4.1).
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  Hourly rate (derived)
+                </label>
+                <div className="flex h-10 items-center px-3 rounded-md border bg-white text-sm tabular-nums">
+                  {hourly != null
+                    ? `${formatMoney(toMinor(hourly), currency)}/hr`
+                    : "—"}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Annual ÷ working hours. Shown for reference.
+                </p>
+              </div>
             </div>
+
+            {/* Working hours override toggle */}
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowHoursOverride(!showHoursOverride)}
+                className="text-xs text-muted-foreground hover:text-foreground"
+                disabled={isLoading}
+              >
+                {showHoursOverride
+                  ? "− Hide working-hours override"
+                  : "+ Override working hours per year"}
+              </button>
+              {showHoursOverride && (
+                <div className="mt-2 flex items-center gap-2">
+                  <label className="text-xs text-muted-foreground">
+                    Hours/year
+                  </label>
+                  <Input
+                    type="number"
+                    min="1"
+                    step="100"
+                    value={hoursOverride}
+                    onChange={(e) => setHoursOverride(e.target.value)}
+                    placeholder={String(DEFAULT_WORKING_HOURS)}
+                    className="h-8 w-28"
+                    disabled={isLoading}
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    (default {DEFAULT_WORKING_HOURS})
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Optional contractor rate override */}
             <div className="space-y-2">
               <label htmlFor="p-rate" className="text-sm font-medium">
-                Contractor Rate (hourly)
+                Contractor hourly rate (optional override)
               </label>
               <Input
                 id="p-rate"
                 type="number"
                 min="0"
-                step="0.01"
+                step="100"
                 value={contractorRate}
                 onChange={(e) => setContractorRate(e.target.value)}
-                placeholder="e.g., 85"
+                placeholder={
+                  hourly != null
+                    ? `Leave blank to use ${formatMoney(toMinor(hourly), currency)}/hr`
+                    : "e.g. 4200"
+                }
                 disabled={isLoading}
               />
               <p className="text-xs text-muted-foreground">
-                Used for contractor time (§4.2).
+                {contractorRate.trim()
+                  ? `Will store ${formatMoney(toMinor(Number(contractorRate)), currency)}/hr as the contractor rate.`
+                  : rate != null
+                  ? `Will store ${formatMoney(toMinor(rate), currency)}/hr (derived from annual).`
+                  : "Enter an annual salary above, or type a rate here."}
               </p>
             </div>
           </div>

@@ -33,10 +33,14 @@ import type {
   PieParticipant,
   PieRole,
   ParticipantStatus,
+  ParticipantTermsVersion,
 } from "@/types/slicing-pie";
 
 /** How many of the member's own rows to include for the drill-down. */
 const RECENT_LIMIT = 25;
+
+/** Default working hours per year for deriving the hourly rate. */
+const DEFAULT_WORKING_HOURS = 2000;
 
 export interface MySlicesPayload {
   pie: {
@@ -59,6 +63,26 @@ export interface MySlicesPayload {
     slice_decimal_places: number;
     percent_decimal_places: number;
   };
+  /**
+   * The member's current compensation terms, if any. Null when the admin
+   * has never set an FMV for this participant — payday will skip them.
+   *
+   * All monetary values are in the Pie's currency, in minor units.
+   * monthly_minor and hourly_minor are derived on the server from the
+   * annual salary, working hours, and contractor rate, so every screen
+   * that reads these fields sees the same numbers.
+   */
+  compensation: {
+    annual_minor: number | null;
+    monthly_minor: number | null;
+    hourly_minor: number | null;
+    contractor_rate_minor: number | null;
+    working_hours_override: number | null;
+    effective_working_hours: number;
+    effective_from: string | null;
+    /** Multiplier the Slicing Pie engine applies to time contributions. */
+    non_cash_multiplier: number;
+  } | null;
   by_category: { category: string; slices: number }[];
   at_risk: {
     /** Unpaid value still riding on this member's contributions. */
@@ -120,16 +144,24 @@ export async function loadMySlices(
     };
   }
 
-  const [{ data: participants }, { data: contributions }, { data: logs }] =
-    await Promise.all([
-      supabase.from("pie_participants").select("*").eq("pie_id", pieId),
-      supabase.from("contributions").select("*").eq("pie_id", pieId),
-      supabase
-        .from("time_logs")
-        .select("hours, status, work_date")
-        .eq("pie_id", pieId)
-        .eq("participant_id", me.id),
-    ]);
+  const [
+    { data: participants },
+    { data: contributions },
+    { data: logs },
+    { data: termsData },
+  ] = await Promise.all([
+    supabase.from("pie_participants").select("*").eq("pie_id", pieId),
+    supabase.from("contributions").select("*").eq("pie_id", pieId),
+    supabase
+      .from("time_logs")
+      .select("hours, status, work_date")
+      .eq("pie_id", pieId)
+      .eq("participant_id", me.id),
+    supabase
+      .from("participant_terms_versions")
+      .select("*")
+      .eq("participant_id", me.id),
+  ]);
 
   const { settings } = await resolvePieConfig(pieId);
 
@@ -154,6 +186,68 @@ export async function loadMySlices(
       }
       return b.id.localeCompare(a.id);
     });
+
+  // ---- Compensation terms --------------------------------------------------
+  // Find the participant's current effective terms. Same sort logic as the
+  // Pie dashboard: newest effective_from wins, newest created_at on tie.
+  const today = new Date().toISOString().split("T")[0];
+  const terms = (termsData ?? []) as ParticipantTermsVersion[];
+  const effectiveTerms =
+    terms
+      .filter((t) => (t.effective_from || "") <= today)
+      .sort((a, b) => {
+        const byDate = (b.effective_from || "").localeCompare(
+          a.effective_from || ""
+        );
+        if (byDate !== 0) return byDate;
+        return (b.created_at || "").localeCompare(a.created_at || "");
+      })[0] ?? null;
+
+  let compensation: MySlicesPayload["compensation"] = null;
+  if (effectiveTerms) {
+    const annual = effectiveTerms.fair_market_salary_minor;
+    const contractor = effectiveTerms.contractor_rate_minor;
+    const hoursOverride = effectiveTerms.working_hours_override;
+    const effectiveHours =
+      hoursOverride != null && hoursOverride > 0
+        ? hoursOverride
+        : DEFAULT_WORKING_HOURS;
+
+    // Monthly rate = annual / 12. Integer arithmetic on minor units.
+    const monthly =
+      annual != null ? Math.round(annual / 12) : null;
+
+    // Hourly rate: prefer the contractor rate if explicitly set;
+    // otherwise derive from annual / working hours.
+    let hourly: number | null = null;
+    if (contractor != null && contractor > 0) {
+      hourly = contractor;
+    } else if (annual != null && annual > 0 && effectiveHours > 0) {
+      hourly = Math.round(annual / effectiveHours);
+    }
+
+    // Pull the multiplier the engine applies to time, so the page shows
+    // the same number the ledger uses. If settings do not expose it,
+    // fall back to the standard 2× from the Slicing Pie model.
+    const rawMultiplier =
+      (settings as { multipliers?: { non_cash?: number } }).multipliers
+        ?.non_cash;
+    const nonCashMultiplier =
+      typeof rawMultiplier === "number" && rawMultiplier > 0
+        ? rawMultiplier
+        : 2;
+
+    compensation = {
+      annual_minor: annual ?? null,
+      monthly_minor: monthly,
+      hourly_minor: hourly,
+      contractor_rate_minor: contractor ?? null,
+      working_hours_override: hoursOverride ?? null,
+      effective_working_hours: effectiveHours,
+      effective_from: effectiveTerms.effective_from ?? null,
+      non_cash_multiplier: nonCashMultiplier,
+    };
+  }
 
   // What is still at risk: value contributed that no payment has bought
   // back yet. planDrawdown() already measures exactly that, so it is
@@ -205,6 +299,7 @@ export async function loadMySlices(
         slice_decimal_places: settings.slice_decimal_places,
         percent_decimal_places: settings.percent_decimal_places,
       },
+      compensation,
       by_category: Array.from(byCategory.entries())
         .map(([category, slices]) => ({ category, slices }))
         .sort((a, b) => b.slices - a.slices),

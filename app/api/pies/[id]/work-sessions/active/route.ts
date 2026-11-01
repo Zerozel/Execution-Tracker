@@ -11,6 +11,12 @@
 //
 // Applies the lazy timeout check to the active session before
 // returning. Sessions awaiting explanation are listed newest first.
+//
+// Sessions under 5 minutes are never shown as awaiting explanation.
+// A session that short cannot be usefully explained — the declared
+// time floor (1 minute) is too close to the ceiling (elapsed), and
+// the form would be impossible or nearly so. The session still
+// exists in the database for audit; it simply does not prompt.
 // ============================================================
 
 import { createClient } from "@/lib/supabase";
@@ -50,6 +56,7 @@ interface EntryRow {
 const GRACE_MS = 2 * 60 * 60 * 1000;   // 2h no-heartbeat → timeout
 const MAX_MS = 12 * 60 * 60 * 1000;    // 12h cap
 const GAP_GRACE_MINUTES = 15;          // trivial gap — do not prompt
+const MIN_EXPLAINABLE_MINUTES = 5;     // sessions shorter than this never prompt
 
 export async function GET(_request: Request, context: RouteContext) {
   try {
@@ -118,6 +125,14 @@ export async function GET(_request: Request, context: RouteContext) {
     > = [];
 
     for (const s of endedRows) {
+      // Skip sessions too short to be worth explaining. This includes
+      // the case where elapsed rounds to 0 minutes — the form would be
+      // impossible to submit because the declared minimum is 1 minute.
+      const elapsedMs =
+        new Date(s.ended_at!).getTime() - new Date(s.started_at).getTime();
+      const elapsedMinutes = Math.floor(elapsedMs / 60000);
+      if (elapsedMinutes < MIN_EXPLAINABLE_MINUTES) continue;
+
       const { data: entryRows } = await supabase
         .from("work_session_entries")
         .select("minutes")

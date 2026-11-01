@@ -17,7 +17,7 @@ import { loadMySlices } from "@/lib/slicing-pie/server/my-slices";
 import { formatMoney, formatPercent, formatSlices } from "@/lib/slicing-pie/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Clock, PieChart, ShieldCheck } from "lucide-react";
+import { Clock, PieChart, ShieldCheck, Wallet } from "lucide-react";
 import Link from "next/link";
 import type { PieParticipant } from "@/types/slicing-pie";
 
@@ -34,8 +34,6 @@ export default async function MySlicesPage() {
   const user = await requireAuthWithTerms();
   const supabase = await createClient();
 
-  // Which Pies is this user a participant in? (Same lookup as My Time —
-  // the caller's own rows only.)
   const { data: participantRows } = await supabase
     .from("pie_participants")
     .select("id, pie_id, display_name, pie_role, status")
@@ -99,6 +97,16 @@ export default async function MySlicesPage() {
         const { slice_decimal_places: sdp, percent_decimal_places: pdp } =
           d.ownership;
         const hasSlices = d.ownership.slices !== 0;
+        const comp = d.compensation;
+
+        // One hour of approved work earns: hourly × non-cash multiplier.
+        // TODO(confirm): assumes the engine computes slices as
+        // fmv_minor × multiplier (no /100). If the engine divides minor
+        // units by 100 first, restore the / 100 here and in the panel.
+        const oneHourSlices =
+          comp?.hourly_minor != null && comp.non_cash_multiplier > 0
+            ? comp.hourly_minor * comp.non_cash_multiplier
+            : null;
 
         return (
           <section key={d.pie.id} className="space-y-4">
@@ -166,6 +174,171 @@ export default async function MySlicesPage() {
               </Card>
             </div>
 
+            {/* ---- Compensation terms (collapsible) ---- */}
+            {comp && (
+              <Card>
+                <CardContent className="py-0">
+                  <details className="group">
+                    <summary className="cursor-pointer list-none py-4 flex items-center justify-between">
+                      <span className="flex items-center gap-2 font-medium">
+                        <Wallet className="h-4 w-4 text-emerald-600" />
+                        Your compensation terms
+                      </span>
+                      <span className="text-xs text-muted-foreground group-open:hidden">
+                        Show
+                      </span>
+                      <span className="text-xs text-muted-foreground hidden group-open:inline">
+                        Hide
+                      </span>
+                    </summary>
+
+                    <div className="space-y-4 pb-4 border-t pt-4">
+                      {/* Rates grid */}
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div>
+                          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                            Annual FMV
+                          </p>
+                          <p className="mt-1 text-base font-semibold tabular-nums">
+                            {comp.annual_minor != null
+                              ? formatMoney(comp.annual_minor, currency)
+                              : "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                            Monthly
+                          </p>
+                          <p className="mt-1 text-base font-semibold tabular-nums">
+                            {comp.monthly_minor != null
+                              ? formatMoney(comp.monthly_minor, currency)
+                              : "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                            Hourly rate
+                          </p>
+                          <p className="mt-1 text-base font-semibold tabular-nums">
+                            {comp.hourly_minor != null
+                              ? `${formatMoney(comp.hourly_minor, currency)}/hr`
+                              : "—"}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Working hours */}
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          Working hours per year
+                        </span>
+                        <span className="tabular-nums">
+                          {comp.effective_working_hours.toLocaleString()}
+                          {comp.working_hours_override != null && (
+                            <span className="ml-2 text-xs text-amber-700">
+                              (custom override)
+                            </span>
+                          )}
+                        </span>
+                      </div>
+
+                      {/* Effective date */}
+                      {comp.effective_from && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">
+                            Current rate since
+                          </span>
+                          <span className="tabular-nums">
+                            {comp.effective_from}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Calculation */}
+                      <div className="rounded-md bg-muted/40 p-3 space-y-1.5 text-xs text-muted-foreground">
+                        <p className="font-medium text-foreground">
+                          How this is calculated
+                        </p>
+                        <ul className="space-y-1 list-disc list-inside">
+                          <li>
+                            Hourly rate = Annual ÷ Working hours
+                            {comp.annual_minor != null &&
+                              comp.hourly_minor != null && (
+                                <>
+                                  {" "}
+                                  ={" "}
+                                  {formatMoney(comp.annual_minor, currency)} ÷{" "}
+                                  {comp.effective_working_hours.toLocaleString()}{" "}
+                                  = {formatMoney(comp.hourly_minor, currency)}/hr
+                                </>
+                              )}
+                          </li>
+                          <li>
+                            Monthly = Annual ÷ 12
+                            {comp.annual_minor != null &&
+                              comp.monthly_minor != null && (
+                                <>
+                                  {" "}
+                                  = {formatMoney(comp.annual_minor, currency)} ÷
+                                  12 ={" "}
+                                  {formatMoney(comp.monthly_minor, currency)}
+                                </>
+                              )}
+                          </li>
+                          {comp.contractor_rate_minor != null && (
+                            <li>
+                              A contractor rate of{" "}
+                              {formatMoney(comp.contractor_rate_minor, currency)}
+                              /hr is on file and overrides the derived rate.
+                            </li>
+                          )}
+                        </ul>
+                      </div>
+
+                      {/* What one hour earns */}
+                      {oneHourSlices != null && (
+                        <div className="rounded-md border border-emerald-200 bg-emerald-50/50 p-3 text-xs">
+                          <p className="font-medium text-emerald-900">
+                            What one hour of approved work earns you
+                          </p>
+                          <p className="text-emerald-800 mt-1">
+                            {formatMoney(comp.hourly_minor!, currency)} ×{" "}
+                            {comp.non_cash_multiplier}× (Slicing Pie time
+                            multiplier) ={" "}
+                            <span className="font-semibold tabular-nums">
+                              {formatSlices(oneHourSlices, sdp)} slices
+                            </span>
+                          </p>
+                          <p className="text-emerald-700 mt-1.5 text-[11px]">
+                            Slices are not the same as money. A slice&apos;s
+                            cash value only exists when the business is sold or
+                            pays out.
+                          </p>
+                        </div>
+                      )}
+
+                      <p className="text-xs text-muted-foreground">
+                        FMV is a valuation benchmark, not a cash obligation. It
+                        is what the Pie uses to price your logged hours — not a
+                        promise of salary.
+                      </p>
+                    </div>
+                  </details>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* ---- Not set warning ---- */}
+            {!comp && (
+              <Card className="border-amber-200 bg-amber-50/50">
+                <CardContent className="py-4 text-sm text-amber-800">
+                  No fair-market salary has been set for you in this Pie yet.
+                  Payday will skip your logged hours until an administrator
+                  sets one. Ask them to set your FMV on the Pie dashboard.
+                </CardContent>
+              </Card>
+            )}
+
             {!hasSlices && d.hours.logged === 0 && (
               <Card>
                 <CardContent className="py-6 text-sm text-muted-foreground">
@@ -202,10 +375,10 @@ export default async function MySlicesPage() {
                     </div>
                   ))}
                   <p className="pt-2 text-xs text-muted-foreground">
-                    Slices are not the same as money. A ₦100 expense earns ×
-                    4 — four hundred slices — while an hour of work earns × 2,
-                    and a slice&apos;s cash value only exists when the
-                    business is sold or pays out.
+                    Slices are not the same as money. Each contribution is
+                    multiplied by the Pie&apos;s factor for its type before it
+                    becomes slices, and a slice&apos;s cash value only exists
+                    when the business is sold or pays out.
                   </p>
                 </CardContent>
               </Card>
